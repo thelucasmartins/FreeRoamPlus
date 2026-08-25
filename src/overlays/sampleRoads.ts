@@ -20,6 +20,10 @@ function line(...offsets: Array<[number, number]>): GeoJSON.LineString {
 export const SAMPLE_ROADS: RoadFeatureCollection = {
   type: 'FeatureCollection',
   features: [
+    // These three OSM-tagged roads deliberately share endpoints, forming one
+    // connected green->yellow->red chain — so a routed trip crosses multiple
+    // edges and categories, not just a single trivial segment. Useful for
+    // exercising the router (src/routing/) end to end, not just the overlay.
     {
       // Public, government-maintained — green.
       type: 'Feature',
@@ -27,15 +31,16 @@ export const SAMPLE_ROADS: RoadFeatureCollection = {
       properties: { source: 'osm', access: 'public', protectedLand: false, name: 'Sample County Road' },
     },
     {
-      // Public but inside national forest / protected land — yellow.
+      // Public but inside national forest / protected land — yellow. Starts
+      // exactly where the green road ends.
       type: 'Feature',
-      geometry: line([-0.008, 0.007], [-0.003, 0.008], [0.002, 0.0075]),
+      geometry: line([0.002, -0.005], [0.004, -0.002], [0.006, 0.001]),
       properties: { source: 'osm', access: 'public', protectedLand: true, name: 'Sample Forest Route' },
     },
     {
-      // Private — red.
+      // Private — red. Starts exactly where the yellow road ends.
       type: 'Feature',
-      geometry: line([0.003, 0.001], [0.007, 0.002], [0.01, 0.001]),
+      geometry: line([0.006, 0.001], [0.008, 0.003], [0.01, 0.004]),
       properties: { source: 'osm', access: 'private', protectedLand: false },
     },
     {

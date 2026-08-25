@@ -135,8 +135,8 @@ Until this file exists on-device, the Roads & Trails toggle shows bundled
 placeholder data covering all five categories (see
 [src/overlays/sampleRoads.ts](../src/overlays/sampleRoads.ts)) — the in-app
 legend flags this with a "Sample data" note. Only the drivable band (green/
-yellow/red) is meant to feed the routing graph in a later step; purple/pink
-trails are display-only per spec §15.
+yellow/red) feeds the routing graph (§7 below); purple/pink trails are
+display-only per spec §15 and are never part of a computed route.
 
 ## 6. Parcels overlay (spec §4)
 
@@ -202,10 +202,71 @@ Then swap `ParcelsOverlay`'s `GeoJSONSource` for a `VectorSource` pointed at
 viewport instead of parsing the whole dataset up front, which is the actual
 fix for the reliability problem — not just a smaller minzoom.
 
+## 7. On-device routing (spec §7)
+
+### Why this isn't literally Valhalla or GraphHopper
+
+The spec calls for "Valhalla or GraphHopper (compiled binary + local data
+extract)". Both are compiled C++/Java engines — there's no Expo/React
+Native module for either (confirmed: the only JS packages for Valhalla are
+either Node native addons, which can't run inside Hermes/JSC on a phone, or
+HTTP clients that call a remote server, which fails the "no live server
+calls" requirement outright). Getting a real one running on-device means
+writing a custom native module — a Swift/Kotlin bridge around a compiled
+routing engine — which needs an Xcode/Android NDK toolchain to build and
+test that this project's environment doesn't have. That's not a config gap;
+it's genuine native-mobile engineering, comparable in scope to what
+Organic Maps or OsmAnd did to embed these engines.
+
+What's implemented instead is a real, working, on-device graph router in
+plain TypeScript — [src/routing/](../src/routing/) — that satisfies the
+spec's *functional* requirements (fully offline, on-device, no server
+calls, turn-by-turn shortest path) without a compiled binary:
+
+- [graph.ts](../src/routing/graph.ts) builds a routing graph from the same
+  classified road/trail data the Roads overlay already renders, keeping
+  only green/yellow/red (drivable) features — purple/pink trails never
+  become graph edges, per spec §15's "only paths meeting the drivable-road
+  width threshold are eligible for turn-by-turn routing".
+- [pathfinding.ts](../src/routing/pathfinding.ts) is A* with a binary-heap
+  priority queue (not a naive linear scan — sized for a real regional
+  graph, not just the sample data).
+- [router.ts](../src/routing/router.ts) snaps both endpoints to the nearest
+  point on the network and assembles the result; a snap more than 20m away
+  is reported as a separate off-network leg (distance + compass bearing)
+  rather than silently folded into the route — the spec §16 fallback.
+
+**No separate graph-extract file or pipeline step exists for this** —
+unlike the spec's "pre-built graph extract" framing, the graph is built
+in-memory from `overlays/roads.geojson` (step 5 above) each time the app
+loads it, via `buildRoutingGraph()`. Getting that file right (step 5) *is*
+the pipeline work routing depends on; there's nothing additional to export.
+
+### Migrating to a real native engine later
+
+If a compiled Valhalla or GraphHopper engine is worth the investment later,
+the pipeline side is the same either way — building tiles from OSM +
+the extracted road network is exactly what `valhalla_build_tiles` (or
+GraphHopper's graph importer) does from a `.osm.pbf` extract, run once on
+a desktop, output copied to the device like every other overlay here. The
+work that's specific to going native is entirely inside `src/routing/`:
+swap `computeRoute()`'s implementation for calls into a custom Expo Modules
+API native module wrapping the compiled engine, while leaving
+`RouteResult`'s shape (and everything in `src/map/RouteOverlay.tsx` /
+`src/screens/RoutePanel.tsx` that consumes it) unchanged.
+
+### Verifying this without a device
+
+`src/routing/` has zero React Native or native dependencies — it's pure
+graph algorithms — so it can be exercised directly under Node with `tsx`,
+independent of the app. That's how the pathfinding, the disconnected-graph
+case, and the off-network fallback were actually verified for this change,
+not just type-checked.
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
 - Offline search index: OSM place/address/POI names for Sonoma County, built
-  at pipeline time and bundled on-device (spec §16).
-- Routing graph: Valhalla or GraphHopper extract (spec §7), fed only by the
-  drivable-width road band above.
+  at pipeline time and bundled on-device (spec §16) — tap-to-pin routing is
+  already in (long-press on the map); text search over named places is what
+  remains from spec §16.
