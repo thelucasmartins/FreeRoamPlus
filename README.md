@@ -42,6 +42,12 @@ On first launch the app shows a setup screen until the offline tile database
 is downloaded (once, over Wi-Fi). See [docs/DATA.md](docs/DATA.md) for
 generating `sonoma.mbtiles` with Planetiler and serving it to the phone.
 
+For a development build on an iPhone via EAS, see
+[docs/BUILD_IOS.md](docs/BUILD_IOS.md) — in particular, note that a physical
+device build through EAS's cloud service requires a paid Apple Developer
+Program account; a free Apple ID only works for Simulator builds or local
+builds run on a Mac.
+
 ## Stack
 
 - App shell: React Native (Expo, TypeScript)
