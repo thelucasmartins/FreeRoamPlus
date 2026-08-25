@@ -9,7 +9,7 @@ Offline off-road navigation and terrain-awareness app for adventure riding in So
 - **Structure detection** — flags man-made buildings from LiDAR nDSM data, distinguishing known/documented structures from undocumented ones not present in public footprint databases.
 - **Road classification** — color-coded by type: green (public/government-maintained), yellow (national forest/protected land), red (private or unclassified/undocumented).
 - **Trail width classification** — LiDAR-detected paths with no OSM classification are bucketed by cleared width: under 1m as hiking trail (purple), 1–3m as ATV trail (pink), 3m+ as drivable road (green/yellow/red per the rule above). Only drivable-width paths join the routable road network.
-- **Parcel boundaries** — toggleable parcel layer showing lot size, zoning, and APN (no owner names). Resource-extraction parcels (timber, mining, milling) are visually flagged separately based on zoning data.
+- **Parcel boundaries** — toggleable parcel layer; tap a parcel to see lot size, zoning, and APN (no owner names — that field doesn't exist in this app's data at all). Resource-extraction parcels (timber, mining, milling) are visually flagged separately based on zoning data.
 - **Elevation/grade indicator** — shows incline and steepness along a route or road segment.
 - **Destination selection** — tap anywhere to pin and route to that exact coordinate, or search by name/address/road using an offline index built from OSM data (public/named locations only, consistent with the labeling rule). Pins with no nearby routable path still get a route to the nearest reachable point, flagged as off-network beyond that.
 - **Waypoints** — drop pins with notes anywhere on the map, saved locally.
@@ -24,18 +24,22 @@ Everything — map tiles, routing graph, LiDAR-derived layers, and parcel data �
 
 🚧 In active development. See [offline-nav-lidar-spec.md](offline-nav-lidar-spec.md) for the full project specification.
 
-Build-order steps 1–4 are done: an Expo/React Native app that renders a local
-Sonoma County MBTiles database with MapLibre, fully offline once the tile
-file is on the device (step 1); a toggleable structures layer distinguishing
-documented buildings (blue) from LiDAR-flagged undocumented ones (red,
-dashed outline) (step 2); a toggleable roads/trails layer applying the
-spec §5 green/yellow/red road classification plus the spec §15 width-based
-trail bands — purple for hiking trails under 1m, pink for ATV trails 1–3m
-(step 3); and a live GPS position dot with a follow-me camera button,
-permission/settings handling, and a first-fix indicator (step 4). Both
-overlays run on bundled placeholder data until the real nDSM pipeline output
-is on-device — see [docs/DATA.md](docs/DATA.md). Parcels overlay (spec §4)
-and packaging (step 5) are next.
+Build-order steps 1–4 are done, plus the parcels overlay from spec §4: an
+Expo/React Native app that renders a local Sonoma County MBTiles database
+with MapLibre, fully offline once the tile file is on the device (step 1); a
+toggleable structures layer distinguishing documented buildings (blue) from
+LiDAR-flagged undocumented ones (red, dashed outline) (step 2); a toggleable
+roads/trails layer applying the spec §5 green/yellow/red road classification
+plus the spec §15 width-based trail bands — purple for hiking trails under
+1m, pink for ATV trails 1–3m (step 3); a live GPS position dot with a
+follow-me camera button, permission/settings handling, and a first-fix
+indicator (step 4); and a toggleable, tap-for-details parcels layer (size,
+zoning, APN — never owner name) with resource-extraction parcels flagged
+separately. All three overlays run on bundled placeholder data until the
+real pipeline/GIS output is on-device — see [docs/DATA.md](docs/DATA.md),
+which also covers the vector-tile approach needed for the parcels layer to
+hold up at full Sonoma County scale (previously a known failure point).
+Packaging as an installable app shell (step 5) is what's left.
 
 ## Running it
 
@@ -63,7 +67,7 @@ builds run on a Mac.
 - App shell: React Native (Expo, TypeScript)
 - Map rendering: MapLibre React Native reading a local MBTiles (SQLite) tile store via `mbtiles://`
 - Routing (planned): Valhalla or GraphHopper (on-device)
-- Overlay data: GeoJSON — structures and roads/trails overlays implemented, parcels planned
+- Overlay data: GeoJSON — structures, roads/trails, and parcels overlays implemented
 - Data sources: OpenStreetMap (via Planetiler), California statewide LiDAR, Microsoft Building Footprints, Sonoma County GIS (Parcels Public, Zoning & Land Use)
 
 ## Scope

@@ -11,14 +11,18 @@ import { StyleSheet, Text, View, type NativeSyntheticEvent } from 'react-native'
 
 import { DEFAULT_ZOOM, FOLLOW_ZOOM, MAX_ZOOM, MIN_ZOOM, SONOMA_CENTER } from '../config';
 import { useUserLocation } from '../location/useUserLocation';
+import { ParcelsOverlay } from '../map/ParcelsOverlay';
 import { RoadsOverlay } from '../map/RoadsOverlay';
 import { StructuresOverlay } from '../map/StructuresOverlay';
+import type { ParcelFeatureCollection, ParcelProperties } from '../overlays/parcelTypes';
+import { loadParcels } from '../overlays/parcelsStore';
 import { loadRoads } from '../overlays/roadsStore';
 import type { ClassifiedRoadFeatureCollection } from '../overlays/roadTypes';
 import { loadStructures } from '../overlays/structuresStore';
 import type { StructureFeatureCollection } from '../overlays/types';
 import { LayersPanel } from './LayersPanel';
 import { LocateButton } from './LocateButton';
+import { ParcelInfoCard } from './ParcelInfoCard';
 
 interface MapScreenProps {
   /** Style JSON (offline) or style URL string (dev fallback). */
@@ -40,6 +44,10 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
   const [roads, setRoads] = useState<ClassifiedRoadFeatureCollection | null>(null);
   const [roadsIsSample, setRoadsIsSample] = useState(false);
   const [roadsVisible, setRoadsVisible] = useState(true);
+  const [parcels, setParcels] = useState<ParcelFeatureCollection | null>(null);
+  const [parcelsIsSample, setParcelsIsSample] = useState(false);
+  const [parcelsVisible, setParcelsVisible] = useState(true);
+  const [selectedParcel, setSelectedParcel] = useState<ParcelProperties | null>(null);
 
   useEffect(() => {
     loadStructures().then(({ data, isSample }) => {
@@ -49,6 +57,10 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     loadRoads().then(({ data, isSample }) => {
       setRoads(data);
       setRoadsIsSample(isSample);
+    });
+    loadParcels().then(({ data, isSample }) => {
+      setParcels(data);
+      setParcelsIsSample(isSample);
     });
   }, []);
 
@@ -73,7 +85,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
 
   return (
     <View style={styles.container}>
-      <MapLibreMap style={styles.map} mapStyle={mapStyle}>
+      <MapLibreMap style={styles.map} mapStyle={mapStyle} onPress={() => setSelectedParcel(null)}>
         <Camera
           initialViewState={{
             center: SONOMA_CENTER,
@@ -85,6 +97,9 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
           zoom={following ? FOLLOW_ZOOM : undefined}
           onTrackUserLocationChange={handleTrackUserLocationChange}
         />
+        {parcelsVisible && parcels && (
+          <ParcelsOverlay data={parcels} onSelect={setSelectedParcel} />
+        )}
         {roadsVisible && roads && <RoadsOverlay data={roads} />}
         {structuresVisible && structures && (
           <StructuresOverlay data={structures} glyphsUrl={glyphsUrl} />
@@ -98,6 +113,9 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         roadsVisible={roadsVisible}
         onToggleRoads={setRoadsVisible}
         roadsIsSample={roadsIsSample}
+        parcelsVisible={parcelsVisible}
+        onToggleParcels={setParcelsVisible}
+        parcelsIsSample={parcelsIsSample}
       />
       <LocateButton
         status={locationStatus}
@@ -116,6 +134,9 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
             Dev fallback style (online) — offline tiles not installed
           </Text>
         </View>
+      )}
+      {selectedParcel && (
+        <ParcelInfoCard parcel={selectedParcel} onDismiss={() => setSelectedParcel(null)} />
       )}
     </View>
   );

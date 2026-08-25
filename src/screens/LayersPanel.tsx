@@ -9,12 +9,15 @@ interface LayersPanelProps {
   onToggleRoads: (visible: boolean) => void;
   /** True when the roads layer is showing bundled placeholder data. */
   roadsIsSample: boolean;
+  parcelsVisible: boolean;
+  onToggleParcels: (visible: boolean) => void;
+  /** True when the parcels layer is showing bundled placeholder data. */
+  parcelsIsSample: boolean;
 }
 
 /**
  * Overlay toggle panel (spec §4: "structures, roads, and parcels can all be
- * layered together"). Structures and roads/trails toggles exist so far —
- * parcels joins this panel in a later build-order step.
+ * layered together"). All three toggles are in now.
  */
 export function LayersPanel({
   structuresVisible,
@@ -23,6 +26,9 @@ export function LayersPanel({
   roadsVisible,
   onToggleRoads,
   roadsIsSample,
+  parcelsVisible,
+  onToggleParcels,
+  parcelsIsSample,
 }: LayersPanelProps) {
   return (
     <View style={styles.panel}>
@@ -88,6 +94,35 @@ export function LayersPanel({
             <Text style={styles.legendLabel}>Undocumented (LiDAR)</Text>
           </View>
           {structuresIsSample && (
+            <Text style={styles.sampleNote}>Sample data — pipeline output not installed</Text>
+          )}
+        </View>
+      )}
+
+      <Pressable
+        style={[styles.row, styles.rowWithDivider]}
+        onPress={() => onToggleParcels(!parcelsVisible)}
+      >
+        <Text style={styles.rowLabel}>Parcels</Text>
+        <Switch
+          value={parcelsVisible}
+          onValueChange={onToggleParcels}
+          trackColor={{ true: '#4a6b3a', false: '#ccc4b6' }}
+        />
+      </Pressable>
+
+      {parcelsVisible && (
+        <View style={styles.legend}>
+          <View style={styles.legendRow}>
+            <View style={[styles.swatch, styles.swatchParcelStandard]} />
+            <Text style={styles.legendLabel}>Standard</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.swatch, styles.swatchParcelResource]} />
+            <Text style={styles.legendLabel}>Resource extraction</Text>
+          </View>
+          <Text style={styles.hintNote}>Tap a parcel for size, zoning &amp; APN</Text>
+          {parcelsIsSample && (
             <Text style={styles.sampleNote}>Sample data — pipeline output not installed</Text>
           )}
         </View>
@@ -174,9 +209,20 @@ const styles = StyleSheet.create({
   swatchPink: {
     backgroundColor: '#e0559c',
   },
+  swatchParcelStandard: {
+    backgroundColor: '#c9bfae',
+  },
+  swatchParcelResource: {
+    backgroundColor: '#b5541c',
+  },
   legendLabel: {
     fontSize: 12,
     color: '#5d5347',
+  },
+  hintNote: {
+    marginTop: 4,
+    fontSize: 10,
+    color: '#8a7a66',
   },
   sampleNote: {
     marginTop: 4,

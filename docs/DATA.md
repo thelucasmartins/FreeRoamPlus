@@ -138,10 +138,73 @@ legend flags this with a "Sample data" note. Only the drivable band (green/
 yellow/red) is meant to feed the routing graph in a later step; purple/pink
 trails are display-only per spec §15.
 
+## 6. Parcels overlay (spec §4)
+
+The app looks for parcel boundaries at
+`<app documents>/overlays/parcels.geojson` — a `FeatureCollection` of
+`Polygon`/`MultiPolygon` features:
+
+```json
+{ "apn": "123-456-789", "zoning": "RR (Rural Residential)", "acres": 4.8, "resourceExtraction": false }
+```
+
+No owner name field exists in this schema at all — the county's own public
+"Parcels Public" layer already excludes it (CPRA privacy restriction), so
+there's nothing for the app to filter out. `acres` should come straight from
+the county's own acreage field rather than being computed from geometry,
+which needs a proper geodesic area calculation to be trustworthy over WGS84
+degree coordinates — not something to improvise. `resourceExtraction` is set
+by cross-referencing the county's Zoning and Land Use layer (timber
+preserve, mineral resource, and similar codes) against parcel boundaries —
+same pipeline-computes-it-once pattern as structures' `documented` flag.
+
+To produce the real file:
+
+1. Download the "Parcels Public" layer from gis.sonomacounty.ca.gov as
+   GeoJSON/shapefile.
+2. Confirm the export actually has `zoning` and `APN`/acreage fields present
+   before building against it (spec §4 calls this out explicitly).
+3. Cross-reference against the Zoning and Land Use layer to set
+   `resourceExtraction` for timber/mining/milling parcels.
+4. Export as GeoJSON (WGS84) named `parcels.geojson`.
+5. Copy it to the device at `overlays/parcels.geojson`.
+
+Until this file exists on-device, the Parcels toggle shows bundled
+placeholder data (see
+[src/overlays/sampleParcels.ts](../src/overlays/sampleParcels.ts)) — tap any
+parcel to see the info card (APN, acreage, zoning) that real data will
+populate the same way.
+
+### Why this overlay failed before (spec §10), and how to avoid it at scale
+
+The spec flags that a parcel layer "previously failed to load/render
+reliably" in an earlier project. The most likely cause at true Sonoma County
+scale: the county's full parcel layer is well over 100,000 features. Loading
+that as one flat GeoJSON file — parsed synchronously into a single JS object
+and handed to one `GeoJSONSource`, which is what
+[src/overlays/parcelsStore.ts](../src/overlays/parcelsStore.ts) does today —
+is exactly the kind of thing that stalls or OOMs a phone, and would silently
+render nothing if the parse or the source ever failed. That code path is
+correct and safe for a moderate export (a sub-region, or the bundled
+sample), but isn't the one to point at the full county.
+
+For the full county-wide export, don't ship it as GeoJSON at all: pre-tile
+it into vector tiles the same way `sonoma.mbtiles` already works reliably
+(step 1 above) — `tippecanoe` is the standard tool for this:
+
+```bash
+tippecanoe -o data/parcels.mbtiles -l parcels -Z10 -z16 --drop-densest-as-needed parcels.geojson
+```
+
+Then swap `ParcelsOverlay`'s `GeoJSONSource` for a `VectorSource` pointed at
+`mbtiles://.../parcels.mbtiles`, matching the pattern in
+[src/map/style.ts](../src/map/style.ts). MapLibre streams vector tiles by
+viewport instead of parsing the whole dataset up front, which is the actual
+fix for the reliability problem — not just a smaller minzoom.
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
-- Parcels overlay: GeoJSON export from Sonoma County GIS (spec §9).
 - Offline search index: OSM place/address/POI names for Sonoma County, built
   at pipeline time and bundled on-device (spec §16).
 - Routing graph: Valhalla or GraphHopper extract (spec §7), fed only by the

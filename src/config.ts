@@ -63,3 +63,11 @@ export const STRUCTURES_FILENAME = 'structures.geojson';
  * cross-reference fields, not a precomputed color.
  */
 export const ROADS_FILENAME = 'roads.geojson';
+
+/**
+ * Filename of the parcels overlay (spec §4, §9): Sonoma County GIS "Parcels
+ * Public" boundaries, cross-referenced against Zoning and Land Use data for
+ * the resource-extraction flag. Owner name is excluded at the source (spec
+ * §4) and isn't part of this app's schema at all.
+ */
+export const PARCELS_FILENAME = 'parcels.geojson';
