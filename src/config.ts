@@ -81,6 +81,13 @@ export const PARCELS_FILENAME = 'parcels.geojson';
  */
 export const SEARCH_INDEX_FILENAME = 'search-index.json';
 
+/**
+ * Filename of the elevation grid (spec §13): a coarse regular DEM grid
+ * sourced from the same LiDAR/DEM data as the nDSM layer, for computing
+ * grade/steepness along a route. See src/elevation/types.ts for the schema.
+ */
+export const DEM_FILENAME = 'dem.json';
+
 /** Directory (under the app's document dir) for user-generated data — not pipeline output, so kept separate from overlays/. */
 export const USER_DATA_DIR_NAME = 'user-data';
 

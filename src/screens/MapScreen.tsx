@@ -12,6 +12,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type NativeSyntheticEvent } from 'react-native';
 
 import { DEFAULT_ZOOM, FOLLOW_ZOOM, MAX_ZOOM, MIN_ZOOM, SONOMA_CENTER } from '../config';
+import { loadDem } from '../elevation/demStore';
+import { buildElevationProfile } from '../elevation/profile';
+import type { ElevationGrid } from '../elevation/types';
 import { useUserLocation } from '../location/useUserLocation';
 import { ParcelsOverlay } from '../map/ParcelsOverlay';
 import { RoadsOverlay } from '../map/RoadsOverlay';
@@ -62,6 +65,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
 
   const [routeState, setRouteState] = useState<RouteRequestState | null>(null);
   const [routeDestination, setRouteDestination] = useState<[number, number] | null>(null);
+  const [demGrid, setDemGrid] = useState<ElevationGrid | null>(null);
 
   const cameraRef = useRef<CameraRef>(null);
 
@@ -82,7 +86,16 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
       setSearchIndexData(index);
       setSearchIndexIsSample(isSample);
     });
+    loadDem().then(({ grid }) => setDemGrid(grid));
   }, []);
+
+  // Recomputed only when the route or DEM grid changes — spec §13's grade
+  // indicator, built from whatever route is currently shown. Null when
+  // there's no result yet, or the route falls entirely outside DEM coverage.
+  const elevationProfile = useMemo(() => {
+    if (!demGrid || routeState?.kind !== 'result') return null;
+    return buildElevationProfile(demGrid, routeState.route.onNetworkCoordinates);
+  }, [demGrid, routeState]);
 
   // Rebuilt only when the classified road data changes, not on every
   // render/long-press — this is the "compiled local graph extract" spec §7
@@ -247,7 +260,13 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
       {selectedParcel && (
         <ParcelInfoCard parcel={selectedParcel} onDismiss={() => setSelectedParcel(null)} />
       )}
-      {routeState && <RoutePanel state={routeState} onDismiss={clearTransientOverlays} />}
+      {routeState && (
+        <RoutePanel
+          state={routeState}
+          onDismiss={clearTransientOverlays}
+          elevationProfile={elevationProfile}
+        />
+      )}
     </View>
   );
 }

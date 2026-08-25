@@ -309,6 +309,51 @@ same feature already visible on the map. The matching/ranking logic itself
 React Native dependencies and was verified standalone under Node with
 `tsx`, same as the routing module.
 
+## 9. Elevation / grade indicator (spec §13)
+
+The app looks for an elevation grid at `<app documents>/overlays/dem.json`:
+
+```json
+{ "bounds": [-123.65, 38.05, -122.30, 38.90], "cols": 200, "rows": 200, "elevationsMeters": [12.4, 13.1, ...] }
+```
+
+A coarse regular grid, not raster tiles — `elevationsMeters` is row-major,
+row 0 = the south edge of `bounds`, col 0 = the west edge (see
+[src/elevation/types.ts](../src/elevation/types.ts)). This app only needs
+elevation *values* at points along a route to compute grade, not a rendered
+terrain surface (that's the separate planned LiDAR hillshade base layer,
+spec §3.3), so a lightweight JSON grid with bilinear interpolation —
+[src/elevation/profile.ts](../src/elevation/profile.ts) — avoids needing a
+raster/PNG decoder in the app just for this.
+
+Whenever a route is active, `MapScreen` samples this grid along the route's
+coordinates to build a profile: cumulative distance, min/max elevation,
+total gain/loss, and the steepest single-segment grade — shown in the
+RoutePanel as a bar-sparkline colored by local grade (green <5%, amber
+5–10%, red 10%+) plus gain/loss/max-grade figures. Points outside the
+grid's coverage are skipped rather than guessing, so a route running off
+the edge of a regional DEM extract degrades gracefully.
+
+To produce the real file:
+
+1. Sourced from the same LiDAR/DEM data already being processed for the
+   nDSM layer (spec §13) — no separate acquisition needed.
+2. Resample to a regular grid at whatever resolution is practical for
+   Sonoma County's extent (finer than the sample's 21×21 — a few hundred
+   points per side keeps the file small while giving road-scale grade
+   accuracy; full LiDAR resolution isn't necessary for this feature).
+3. Export as JSON in the schema above, named `dem.json`.
+4. Copy it to the device at `overlays/dem.json`.
+
+Until this file exists on-device, elevation profiles are built from a
+synthetic rolling-hills grid (see
+[src/elevation/sampleDem.ts](../src/elevation/sampleDem.ts)) covering the
+same area as the other sample overlays — not derived from real terrain,
+just enough to exercise the chart and grade math. That math —
+`sampleElevation()`'s bilinear interpolation and `buildElevationProfile()`'s
+gain/loss/grade calculation — was verified standalone under Node with
+`tsx` against a hand-checkable grid, same pattern as routing and search.
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
