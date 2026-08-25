@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { ElevationProfile } from '../elevation/types';
 import { compassLabel } from '../routing/geo';
@@ -14,9 +15,12 @@ export type RouteRequestState =
 
 interface RoutePanelProps {
   state: RouteRequestState;
+  /** The held/searched point this panel is about — used to key the waypoint-save UI to a fresh point. */
+  destination: [number, number];
   onDismiss: () => void;
   /** Elevation profile for the current route, if a DEM grid covers it (spec §13). */
   elevationProfile: ElevationProfile | null;
+  onSaveWaypoint: (note: string) => void;
 }
 
 const MESSAGES: Record<'needs-location' | 'waiting-for-fix', string> = {
@@ -37,9 +41,36 @@ function formatFeet(meters: number): string {
  * Bottom info panel for a long-press/search route request (spec §7, §16).
  * Reports either a normal route (plus an elevation/grade profile, spec
  * §13, when DEM coverage exists for it), an off-network leg on either end,
- * or why a route couldn't be produced — never fails silently.
+ * or why a route couldn't be produced — never fails silently. Also offers
+ * saving the held point as a waypoint (spec §11), independent of whether a
+ * route could be computed — you can still drop a pin somewhere with no GPS
+ * fix or no road network loaded.
  */
-export function RoutePanel({ state, onDismiss, elevationProfile }: RoutePanelProps) {
+export function RoutePanel({
+  state,
+  destination,
+  onDismiss,
+  elevationProfile,
+  onSaveWaypoint,
+}: RoutePanelProps) {
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [justSaved, setJustSaved] = useState(false);
+
+  // A fresh long-press/search result means a fresh point — don't carry
+  // save-in-progress state from whatever was held before.
+  useEffect(() => {
+    setEditingNote(false);
+    setNoteDraft('');
+    setJustSaved(false);
+  }, [destination]);
+
+  const handleSave = () => {
+    onSaveWaypoint(noteDraft);
+    setEditingNote(false);
+    setJustSaved(true);
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -91,6 +122,36 @@ export function RoutePanel({ state, onDismiss, elevationProfile }: RoutePanelPro
           )}
         </>
       )}
+
+      <View style={styles.waypointSection}>
+        {justSaved ? (
+          <Text style={styles.savedNote}>Waypoint saved</Text>
+        ) : editingNote ? (
+          <View>
+            <TextInput
+              style={styles.noteInput}
+              value={noteDraft}
+              onChangeText={setNoteDraft}
+              placeholder="Add a note (optional)"
+              placeholderTextColor="#a39a89"
+              autoFocus
+              multiline
+            />
+            <View style={styles.noteActions}>
+              <Pressable onPress={() => setEditingNote(false)}>
+                <Text style={styles.noteCancel}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={handleSave}>
+                <Text style={styles.noteSave}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <Pressable onPress={() => setEditingNote(true)}>
+            <Text style={styles.saveWaypointLink}>+ Save waypoint here</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -170,5 +231,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#5d5347',
+  },
+  waypointSection: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ddd4c5',
+  },
+  saveWaypointLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f9b8e',
+  },
+  savedNote: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f9b8e',
+  },
+  noteInput: {
+    fontSize: 13,
+    color: '#3d3a34',
+    backgroundColor: '#f4f1ea',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 40,
+  },
+  noteActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+    marginTop: 8,
+  },
+  noteCancel: {
+    fontSize: 13,
+    color: '#8a7a66',
+  },
+  noteSave: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f9b8e',
   },
 });

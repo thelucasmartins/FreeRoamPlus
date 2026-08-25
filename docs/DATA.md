@@ -354,6 +354,19 @@ just enough to exercise the chart and grade math. That math —
 gain/loss/grade calculation — was verified standalone under Node with
 `tsx` against a hand-checkable grid, same pattern as routing and search.
 
+## Waypoints — local user data, not pipeline output (spec §11)
+
+Unlike everything above, waypoints have no pipeline step at all: they're
+saved locally at `<app documents>/user-data/waypoints.json` whenever the
+user saves one via the RoutePanel's "Save waypoint here" action (see
+[src/waypoints/waypointsStore.ts](../src/waypoints/waypointsStore.ts)).
+Deliberately kept out of `overlays/` — that directory is read-only,
+pipeline-sourced data the app never writes to; `user-data/` is the app's
+own write target. Per spec §11 ("not synced to cloud automatically ...
+manual export/backup recommended before switching phones"), there's no
+export/import UI yet — if that's wanted, it'd read/write the same
+`waypoints.json` file via `expo-file-system`'s share/document-picker APIs.
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.

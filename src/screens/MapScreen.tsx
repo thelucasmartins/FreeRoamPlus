@@ -20,6 +20,7 @@ import { ParcelsOverlay } from '../map/ParcelsOverlay';
 import { RoadsOverlay } from '../map/RoadsOverlay';
 import { RouteOverlay } from '../map/RouteOverlay';
 import { StructuresOverlay } from '../map/StructuresOverlay';
+import { WaypointsOverlay } from '../map/WaypointsOverlay';
 import type { ParcelFeatureCollection, ParcelProperties } from '../overlays/parcelTypes';
 import { loadParcels } from '../overlays/parcelsStore';
 import { loadRoads } from '../overlays/roadsStore';
@@ -30,11 +31,14 @@ import { loadStructures } from '../overlays/structuresStore';
 import type { StructureFeatureCollection } from '../overlays/types';
 import { buildRoutingGraph } from '../routing/graph';
 import { computeRoute } from '../routing/router';
+import type { Waypoint } from '../waypoints/types';
+import { createWaypoint, loadWaypoints, saveWaypoints } from '../waypoints/waypointsStore';
 import { LayersPanel } from './LayersPanel';
 import { LocateButton } from './LocateButton';
 import { ParcelInfoCard } from './ParcelInfoCard';
 import { RoutePanel, type RouteRequestState } from './RoutePanel';
 import { SearchBar } from './SearchBar';
+import { WaypointInfoCard } from './WaypointInfoCard';
 
 interface MapScreenProps {
   /** Style JSON (offline) or style URL string (dev fallback). */
@@ -66,6 +70,8 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
   const [routeState, setRouteState] = useState<RouteRequestState | null>(null);
   const [routeDestination, setRouteDestination] = useState<[number, number] | null>(null);
   const [demGrid, setDemGrid] = useState<ElevationGrid | null>(null);
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [selectedWaypoint, setSelectedWaypoint] = useState<Waypoint | null>(null);
 
   const cameraRef = useRef<CameraRef>(null);
 
@@ -87,6 +93,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
       setSearchIndexIsSample(isSample);
     });
     loadDem().then(({ grid }) => setDemGrid(grid));
+    loadWaypoints().then(setWaypoints);
   }, []);
 
   // Recomputed only when the route or DEM grid changes — spec §13's grade
@@ -124,15 +131,45 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
 
   const clearTransientOverlays = useCallback(() => {
     setSelectedParcel(null);
+    setSelectedWaypoint(null);
     setRouteState(null);
     setRouteDestination(null);
   }, []);
 
   const handleSelectParcel = useCallback((parcel: ParcelProperties) => {
     setSelectedParcel(parcel);
+    setSelectedWaypoint(null);
     setRouteState(null);
     setRouteDestination(null);
   }, []);
+
+  const handleSelectWaypoint = useCallback((waypoint: Waypoint) => {
+    setSelectedWaypoint(waypoint);
+    setSelectedParcel(null);
+    setRouteState(null);
+    setRouteDestination(null);
+  }, []);
+
+  const handleSaveWaypoint = useCallback(
+    (note: string) => {
+      if (!routeDestination) return;
+      const waypoint = createWaypoint(routeDestination, note);
+      const next = [...waypoints, waypoint];
+      setWaypoints(next);
+      saveWaypoints(next);
+    },
+    [routeDestination, waypoints],
+  );
+
+  const handleDeleteWaypoint = useCallback(
+    (id: string) => {
+      const next = waypoints.filter((w) => w.id !== id);
+      setWaypoints(next);
+      saveWaypoints(next);
+      setSelectedWaypoint(null);
+    },
+    [waypoints],
+  );
 
   // Shared by long-press and search-result selection — both are just
   // different ways of naming the same "route from here to this point"
@@ -140,6 +177,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
   const requestRouteTo = useCallback(
     (destination: [number, number]) => {
       setSelectedParcel(null);
+      setSelectedWaypoint(null);
       setRouteDestination(destination);
 
       if (locationStatus !== 'granted') {
@@ -218,6 +256,9 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         {structuresVisible && structures && (
           <StructuresOverlay data={structures} glyphsUrl={glyphsUrl} />
         )}
+        {waypoints.length > 0 && (
+          <WaypointsOverlay waypoints={waypoints} onSelect={handleSelectWaypoint} />
+        )}
         {locationStatus === 'granted' && <UserLocation accuracy heading />}
         {routeState?.kind === 'result' && routeDestination && (
           <RouteOverlay route={routeState.route} destination={routeDestination} />
@@ -260,11 +301,20 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
       {selectedParcel && (
         <ParcelInfoCard parcel={selectedParcel} onDismiss={() => setSelectedParcel(null)} />
       )}
-      {routeState && (
+      {selectedWaypoint && (
+        <WaypointInfoCard
+          waypoint={selectedWaypoint}
+          onDismiss={() => setSelectedWaypoint(null)}
+          onDelete={() => handleDeleteWaypoint(selectedWaypoint.id)}
+        />
+      )}
+      {routeState && routeDestination && (
         <RoutePanel
           state={routeState}
+          destination={routeDestination}
           onDismiss={clearTransientOverlays}
           elevationProfile={elevationProfile}
+          onSaveWaypoint={handleSaveWaypoint}
         />
       )}
     </View>
