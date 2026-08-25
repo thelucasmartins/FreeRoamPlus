@@ -82,15 +82,64 @@ To produce the real file:
 Only documented structures should carry a `name` — undocumented ones are
 never labeled with identifying info (spec §6).
 
+## 5. Roads/trails overlay (build-order step 3)
+
+The app looks for road and path data at
+`<app documents>/overlays/roads.geojson` — a `FeatureCollection` of
+`LineString` features carrying **raw** cross-reference fields, not a
+precomputed color. Classification into the five spec categories (green/
+yellow/red from §5, purple/pink from §15) happens on-device in
+[src/overlays/roadClassification.ts](../src/overlays/roadClassification.ts),
+so the rule lives in one inspectable place rather than being baked into a
+pipeline export. Two feature shapes, one per property set:
+
+```json
+{ "source": "osm", "access": "public", "protectedLand": false, "name": "optional, public roads only" }
+{ "source": "lidar", "widthMeters": 2.4 }
+```
+
+- **`source: "osm"`** — a road with OSM tag data. `access` is `"public"`,
+  `"private"`, or `"unknown"` (present in OSM but no resolvable access tag —
+  treated the same as private, per spec §5's "no public data" clause).
+  `protectedLand` is set by cross-referencing national forest / protected-
+  land boundaries against the road geometry.
+- **`source: "lidar"`** — a LiDAR-detected cleared path with no OSM match.
+  `widthMeters` is the measured cleared width; the app buckets it into
+  hiking trail (<1m, purple), ATV trail (1–3m, pink), or drivable-but-
+  unclassified (3m+, red) per spec §15.
+
+**Spec §10 open question**: OSM tagging doesn't cleanly map to public vs.
+government vs. protected land. `roadClassification.ts` currently uses a
+first-pass rule (private/unknown access → red; protected land → yellow
+regardless of access, since restricted-access rules there matter more to a
+rider than the public/private distinction; otherwise green) to unblock
+rendering. Revisit this once real OSM tag coverage for Sonoma County roads
+has been reviewed — the fix belongs in that one function, not the app code
+that consumes its output.
+
+To produce the real file:
+
+1. Run LiDAR road extraction (flat, linear cleared paths) over the Sonoma
+   County tile set, recording cleared width per segment (spec §9 step 3).
+2. Cross-reference against OSM road tags; where a match exists, emit an
+   `osm`-sourced feature with `access`/`protectedLand`/`name` instead of a
+   `lidar`-sourced one.
+3. Export as GeoJSON (WGS84) named `roads.geojson`.
+4. Copy it to the device at `overlays/roads.geojson` (same manual/Wi-Fi
+   transfer approach as the tile database above).
+
+Until this file exists on-device, the Roads & Trails toggle shows bundled
+placeholder data covering all five categories (see
+[src/overlays/sampleRoads.ts](../src/overlays/sampleRoads.ts)) — the in-app
+legend flags this with a "Sample data" note. Only the drivable band (green/
+yellow/red) is meant to feed the routing graph in a later step; purple/pink
+trails are display-only per spec §15.
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
-- Roads / parcels overlays: GeoJSON exports from the existing nDSM pipeline
-  and Sonoma County GIS (spec §9).
-- Road extraction bucketing: LiDAR-detected paths lacking OSM classification
-  get split by cleared width into hiking trail / ATV trail / drivable road
-  before the green/yellow/red assignment (spec §15); only the drivable band
-  feeds the routing graph below.
+- Parcels overlay: GeoJSON export from Sonoma County GIS (spec §9).
 - Offline search index: OSM place/address/POI names for Sonoma County, built
   at pipeline time and bundled on-device (spec §16).
-- Routing graph: Valhalla or GraphHopper extract (spec §7).
+- Routing graph: Valhalla or GraphHopper extract (spec §7), fed only by the
+  drivable-width road band above.

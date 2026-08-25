@@ -24,14 +24,16 @@ Everything — map tiles, routing graph, LiDAR-derived layers, and parcel data �
 
 🚧 In active development. See [offline-nav-lidar-spec.md](offline-nav-lidar-spec.md) for the full project specification.
 
-Build-order step 1 (offline map rendering) is done: an Expo/React Native app
-that renders a local Sonoma County MBTiles database with MapLibre, fully
-offline once the tile file is on the device. Step 2 (structures overlay) is
-also in: a toggleable layer distinguishing documented buildings (blue) from
-LiDAR-flagged undocumented ones (red, dashed outline), backed by bundled
-placeholder data until the real nDSM pipeline output is on-device — see
-[docs/DATA.md](docs/DATA.md). Road color-coding, GPS live-tracking, and
-packaging are next.
+Build-order steps 1–3 are done: an Expo/React Native app that renders a local
+Sonoma County MBTiles database with MapLibre, fully offline once the tile
+file is on the device (step 1); a toggleable structures layer distinguishing
+documented buildings (blue) from LiDAR-flagged undocumented ones (red,
+dashed outline) (step 2); and a toggleable roads/trails layer applying the
+spec §5 green/yellow/red road classification plus the spec §15 width-based
+trail bands — purple for hiking trails under 1m, pink for ATV trails 1–3m
+(step 3). Both overlays run on bundled placeholder data until the real nDSM
+pipeline output is on-device — see [docs/DATA.md](docs/DATA.md). GPS
+live-tracking and packaging are next.
 
 ## Running it
 
@@ -59,7 +61,7 @@ builds run on a Mac.
 - App shell: React Native (Expo, TypeScript)
 - Map rendering: MapLibre React Native reading a local MBTiles (SQLite) tile store via `mbtiles://`
 - Routing (planned): Valhalla or GraphHopper (on-device)
-- Overlay data: GeoJSON — structures overlay implemented, roads/parcels planned
+- Overlay data: GeoJSON — structures and roads/trails overlays implemented, parcels planned
 - Data sources: OpenStreetMap (via Planetiler), California statewide LiDAR, Microsoft Building Footprints, Sonoma County GIS (Parcels Public, Zoning & Land Use)
 
 ## Scope

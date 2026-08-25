@@ -5,24 +5,68 @@ interface LayersPanelProps {
   onToggleStructures: (visible: boolean) => void;
   /** True when the structures layer is showing bundled placeholder data. */
   structuresIsSample: boolean;
+  roadsVisible: boolean;
+  onToggleRoads: (visible: boolean) => void;
+  /** True when the roads layer is showing bundled placeholder data. */
+  roadsIsSample: boolean;
 }
 
 /**
  * Overlay toggle panel (spec §4: "structures, roads, and parcels can all be
- * layered together"). Only the structures toggle exists so far — roads and
- * parcels join this panel in later build-order steps.
+ * layered together"). Structures and roads/trails toggles exist so far —
+ * parcels joins this panel in a later build-order step.
  */
 export function LayersPanel({
   structuresVisible,
   onToggleStructures,
   structuresIsSample,
+  roadsVisible,
+  onToggleRoads,
+  roadsIsSample,
 }: LayersPanelProps) {
   return (
     <View style={styles.panel}>
       <Text style={styles.title}>Layers</Text>
 
+      <Pressable style={styles.row} onPress={() => onToggleRoads(!roadsVisible)}>
+        <Text style={styles.rowLabel}>Roads &amp; Trails</Text>
+        <Switch
+          value={roadsVisible}
+          onValueChange={onToggleRoads}
+          trackColor={{ true: '#4a6b3a', false: '#ccc4b6' }}
+        />
+      </Pressable>
+
+      {roadsVisible && (
+        <View style={styles.legend}>
+          <View style={styles.legendRow}>
+            <View style={[styles.swatch, styles.swatchGreen]} />
+            <Text style={styles.legendLabel}>Public / government</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.swatch, styles.swatchYellow]} />
+            <Text style={styles.legendLabel}>National forest / protected</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.swatch, styles.swatchRed]} />
+            <Text style={styles.legendLabel}>Private / unclassified</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.swatch, styles.swatchPurple]} />
+            <Text style={styles.legendLabel}>Hiking trail (&lt;1m)</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.swatch, styles.swatchPink]} />
+            <Text style={styles.legendLabel}>ATV trail (1–3m)</Text>
+          </View>
+          {roadsIsSample && (
+            <Text style={styles.sampleNote}>Sample data — pipeline output not installed</Text>
+          )}
+        </View>
+      )}
+
       <Pressable
-        style={styles.row}
+        style={[styles.row, styles.rowWithDivider]}
         onPress={() => onToggleStructures(!structuresVisible)}
       >
         <Text style={styles.rowLabel}>Structures</Text>
@@ -61,7 +105,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    minWidth: 190,
+    minWidth: 200,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -80,6 +124,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  rowWithDivider: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ddd4c5',
   },
   rowLabel: {
     fontSize: 14,
@@ -108,6 +158,21 @@ const styles = StyleSheet.create({
   },
   swatchUndocumented: {
     backgroundColor: '#c1443a',
+  },
+  swatchGreen: {
+    backgroundColor: '#3f9142',
+  },
+  swatchYellow: {
+    backgroundColor: '#e0a930',
+  },
+  swatchRed: {
+    backgroundColor: '#c1443a',
+  },
+  swatchPurple: {
+    backgroundColor: '#8b5fbf',
+  },
+  swatchPink: {
+    backgroundColor: '#e0559c',
   },
   legendLabel: {
     fontSize: 12,

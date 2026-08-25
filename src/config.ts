@@ -51,3 +51,12 @@ export const OVERLAYS_DIR_NAME = 'overlays';
  * nDSM pipeline.
  */
 export const STRUCTURES_FILENAME = 'structures.geojson';
+
+/**
+ * Filename of the roads/trails overlay (spec §5, §9, §15): OSM-classified
+ * roads plus LiDAR-detected paths, exported by the desktop pipeline. The app
+ * applies the green/yellow/red and width-band classification rules itself —
+ * see src/overlays/roadClassification.ts — so this file carries the raw
+ * cross-reference fields, not a precomputed color.
+ */
+export const ROADS_FILENAME = 'roads.geojson';

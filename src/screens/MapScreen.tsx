@@ -9,9 +9,12 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, SONOMA_CENTER } from '../config';
+import { RoadsOverlay } from '../map/RoadsOverlay';
+import { StructuresOverlay } from '../map/StructuresOverlay';
+import { loadRoads } from '../overlays/roadsStore';
+import type { ClassifiedRoadFeatureCollection } from '../overlays/roadTypes';
 import { loadStructures } from '../overlays/structuresStore';
 import type { StructureFeatureCollection } from '../overlays/types';
-import { StructuresOverlay } from '../map/StructuresOverlay';
 import { LayersPanel } from './LayersPanel';
 
 interface MapScreenProps {
@@ -28,6 +31,9 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
   const [structures, setStructures] = useState<StructureFeatureCollection | null>(null);
   const [structuresIsSample, setStructuresIsSample] = useState(false);
   const [structuresVisible, setStructuresVisible] = useState(true);
+  const [roads, setRoads] = useState<ClassifiedRoadFeatureCollection | null>(null);
+  const [roadsIsSample, setRoadsIsSample] = useState(false);
+  const [roadsVisible, setRoadsVisible] = useState(true);
 
   useEffect(() => {
     // GPS works fully offline (spec §8); ask once so the position dot can show.
@@ -40,6 +46,10 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     loadStructures().then(({ data, isSample }) => {
       setStructures(data);
       setStructuresIsSample(isSample);
+    });
+    loadRoads().then(({ data, isSample }) => {
+      setRoads(data);
+      setRoadsIsSample(isSample);
     });
   }, []);
 
@@ -54,6 +64,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
         />
+        {roadsVisible && roads && <RoadsOverlay data={roads} />}
         {structuresVisible && structures && (
           <StructuresOverlay data={structures} glyphsUrl={glyphsUrl} />
         )}
@@ -63,6 +74,9 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         structuresVisible={structuresVisible}
         onToggleStructures={setStructuresVisible}
         structuresIsSample={structuresIsSample}
+        roadsVisible={roadsVisible}
+        onToggleRoads={setRoadsVisible}
+        roadsIsSample={roadsIsSample}
       />
       {!offline && (
         <View style={styles.banner}>
