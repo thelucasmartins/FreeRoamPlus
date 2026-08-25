@@ -13,7 +13,7 @@ Offline off-road navigation and terrain-awareness app for adventure riding in So
 - **Elevation/grade indicator** — a bar-sparkline elevation profile for the active route, colored by local grade (green/amber/red), plus total gain/loss and max grade — sourced from the same LiDAR/DEM data as the nDSM layer, works offline.
 - **Destination selection** — long-press anywhere to route to that exact coordinate, whether or not it falls on a known road, or search by place/road/POI name in the offline search bar; both lead to the same route request. A point with no nearby drivable road/trail still gets a route to the nearest reachable point on the network, with the remaining distance/direction flagged as off-network.
 - **Waypoints** — save a pin with an optional note at any held/searched point (via the route panel), rendered as a marker on the map; tap one to view its note or delete it. Saved to on-device storage only, persists across sessions, never synced anywhere.
-- **Breadcrumb trail** — optional, manually-toggled trail of the current ride for backtracking.
+- **Breadcrumb trail** — off by default; toggle recording on to trace the current ride for backtracking, stop and resume anytime, clear it independently. In-memory only for the current session — nothing is written to disk, so there's no location history left behind.
 - **Live GPS tracking** — uses the phone's onboard GPS chip directly, no signal required. A locate button recenters and locks the camera to your position (tap again to release); it also handles permission prompts, a "location off" state with a way to fix it, and an "Acquiring GPS…" indicator during the first fix.
 
 ## Why offline
@@ -25,7 +25,7 @@ Everything — map tiles, routing graph, LiDAR-derived layers, and parcel data �
 🚧 In active development. See [offline-nav-lidar-spec.md](offline-nav-lidar-spec.md) for the full project specification.
 
 Build-order steps 1–4 are done, plus parcels (§4), routing (§7), search
-(§16), elevation (§13), and waypoints (§11):
+(§16), elevation (§13), waypoints (§11), and breadcrumb trail (§12):
 
 - **Step 1** — offline MBTiles base map via MapLibre, fully offline once the tile file is on-device.
 - **Step 2** — toggleable structures layer: documented buildings (blue) vs. LiDAR-flagged undocumented ones (red, dashed outline).
@@ -35,14 +35,16 @@ Build-order steps 1–4 are done, plus parcels (§4), routing (§7), search
 - **Routing (§7, §16)** — turn-by-turn over the drivable road network, with the §16 off-network fallback, reachable by long-press or offline search.
 - **Elevation (§13)** — grade/profile chart for the active route, colored by steepness.
 - **Waypoints (§11)** — save/view/delete pins with notes from the route panel, persisted on-device.
+- **Breadcrumb trail (§12)** — off by default, toggle to record, stop/resume/clear independently, in-memory only.
 
 All overlays and the DEM/waypoint data run on bundled placeholder data
 until the real pipeline/GIS output is on-device — see
 [docs/DATA.md](docs/DATA.md), which also covers the vector-tile approach
 needed for the parcels layer at full county scale, and why routing here is
 a custom on-device graph router rather than a compiled Valhalla/GraphHopper
-binary. Breadcrumb trail (§12) and packaging as an installable app shell
-(step 5) are what's left.
+binary. Packaging as an installable app shell (step 5) is what's left from
+the build order; remaining spec items not yet started are the satellite and
+LiDAR hillshade base layers (§3.2–3.3).
 
 ## Running it
 

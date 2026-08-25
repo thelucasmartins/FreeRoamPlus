@@ -367,6 +367,18 @@ manual export/backup recommended before switching phones"), there's no
 export/import UI yet — if that's wanted, it'd read/write the same
 `waypoints.json` file via `expo-file-system`'s share/document-picker APIs.
 
+## Breadcrumb trail — no storage at all (spec §12)
+
+Also has no pipeline step, and unlike waypoints, no persistence step
+either: `MapScreen` accumulates GPS positions into in-memory state
+(`breadcrumbPoints`) while recording is on, and nothing is written to
+disk. That's deliberate, not a gap — spec §12 explicitly frames this as
+"not always-on tracking; avoids unnecessary battery/storage use and
+unwanted location history." Closing the app or navigating away loses the
+trail; if a "save this ride" feature is wanted later, that's a new,
+explicit user action (parallel to waypoints' save flow), not something
+breadcrumb recording should do implicitly.
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.

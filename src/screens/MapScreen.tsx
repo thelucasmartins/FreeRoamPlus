@@ -16,6 +16,7 @@ import { loadDem } from '../elevation/demStore';
 import { buildElevationProfile } from '../elevation/profile';
 import type { ElevationGrid } from '../elevation/types';
 import { useUserLocation } from '../location/useUserLocation';
+import { BreadcrumbOverlay } from '../map/BreadcrumbOverlay';
 import { ParcelsOverlay } from '../map/ParcelsOverlay';
 import { RoadsOverlay } from '../map/RoadsOverlay';
 import { RouteOverlay } from '../map/RouteOverlay';
@@ -29,16 +30,21 @@ import { loadSearchIndex } from '../overlays/searchStore';
 import type { SearchEntry, SearchIndex } from '../overlays/searchTypes';
 import { loadStructures } from '../overlays/structuresStore';
 import type { StructureFeatureCollection } from '../overlays/types';
+import { haversineMeters } from '../routing/geo';
 import { buildRoutingGraph } from '../routing/graph';
 import { computeRoute } from '../routing/router';
 import type { Waypoint } from '../waypoints/types';
 import { createWaypoint, loadWaypoints, saveWaypoints } from '../waypoints/waypointsStore';
+import { BreadcrumbButton } from './BreadcrumbButton';
 import { LayersPanel } from './LayersPanel';
 import { LocateButton } from './LocateButton';
 import { ParcelInfoCard } from './ParcelInfoCard';
 import { RoutePanel, type RouteRequestState } from './RoutePanel';
 import { SearchBar } from './SearchBar';
 import { WaypointInfoCard } from './WaypointInfoCard';
+
+/** Minimum movement before a new breadcrumb point is recorded (spec §12). */
+const MIN_BREADCRUMB_DISPLACEMENT_METERS = 5;
 
 interface MapScreenProps {
   /** Style JSON (offline) or style URL string (dev fallback). */
@@ -73,6 +79,12 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [selectedWaypoint, setSelectedWaypoint] = useState<Waypoint | null>(null);
 
+  // Off by default (spec §12) — not persisted across sessions/restarts,
+  // deliberately: this is a live, in-memory "path so far", not a saved
+  // track, so there's no unwanted location history sitting on disk.
+  const [breadcrumbRecording, setBreadcrumbRecording] = useState(false);
+  const [breadcrumbPoints, setBreadcrumbPoints] = useState<[number, number][]>([]);
+
   const cameraRef = useRef<CameraRef>(null);
 
   useEffect(() => {
@@ -104,6 +116,19 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     return buildElevationProfile(demGrid, routeState.route.onNetworkCoordinates);
   }, [demGrid, routeState]);
 
+  // Appends the live GPS position while recording (spec §12), skipping
+  // points too close to the last one so a stationary rider doesn't flood
+  // the trail with near-duplicate points from GPS jitter.
+  useEffect(() => {
+    if (!breadcrumbRecording || !currentPosition) return;
+    const point: [number, number] = [currentPosition.coords.longitude, currentPosition.coords.latitude];
+    setBreadcrumbPoints((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && haversineMeters(last, point) < MIN_BREADCRUMB_DISPLACEMENT_METERS) return prev;
+      return [...prev, point];
+    });
+  }, [breadcrumbRecording, currentPosition]);
+
   // Rebuilt only when the classified road data changes, not on every
   // render/long-press — this is the "compiled local graph extract" spec §7
   // asks for, just built in-memory from the same data the Roads overlay
@@ -128,6 +153,17 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     }
     setFollowing((prev) => !prev);
   }, [locationStatus, requestOrOpenSettings]);
+
+  // Toggling stops/resumes appending to the same trail rather than
+  // starting a new one — spec §12 frames this as one continuous
+  // "path already ridden during the current session", not fragments.
+  const handleToggleBreadcrumb = useCallback(() => {
+    setBreadcrumbRecording((prev) => !prev);
+  }, []);
+
+  const handleClearBreadcrumb = useCallback(() => {
+    setBreadcrumbPoints([]);
+  }, []);
 
   const clearTransientOverlays = useCallback(() => {
     setSelectedParcel(null);
@@ -256,6 +292,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         {structuresVisible && structures && (
           <StructuresOverlay data={structures} glyphsUrl={glyphsUrl} />
         )}
+        {breadcrumbPoints.length >= 2 && <BreadcrumbOverlay points={breadcrumbPoints} />}
         {waypoints.length > 0 && (
           <WaypointsOverlay waypoints={waypoints} onSelect={handleSelectWaypoint} />
         )}
@@ -279,6 +316,12 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         parcelsVisible={parcelsVisible}
         onToggleParcels={setParcelsVisible}
         parcelsIsSample={parcelsIsSample}
+      />
+      <BreadcrumbButton
+        recording={breadcrumbRecording}
+        hasPoints={breadcrumbPoints.length > 0}
+        onToggle={handleToggleBreadcrumb}
+        onClear={handleClearBreadcrumb}
       />
       <LocateButton
         status={locationStatus}
