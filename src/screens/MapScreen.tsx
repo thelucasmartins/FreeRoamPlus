@@ -3,11 +3,12 @@ import {
   Map as MapLibreMap,
   useCurrentPosition,
   UserLocation,
+  type CameraRef,
   type PressEvent,
   type StyleSpecification,
   type TrackUserLocationChangeEvent,
 } from '@maplibre/maplibre-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type NativeSyntheticEvent } from 'react-native';
 
 import { DEFAULT_ZOOM, FOLLOW_ZOOM, MAX_ZOOM, MIN_ZOOM, SONOMA_CENTER } from '../config';
@@ -20,6 +21,8 @@ import type { ParcelFeatureCollection, ParcelProperties } from '../overlays/parc
 import { loadParcels } from '../overlays/parcelsStore';
 import { loadRoads } from '../overlays/roadsStore';
 import type { ClassifiedRoadFeatureCollection } from '../overlays/roadTypes';
+import { loadSearchIndex } from '../overlays/searchStore';
+import type { SearchEntry, SearchIndex } from '../overlays/searchTypes';
 import { loadStructures } from '../overlays/structuresStore';
 import type { StructureFeatureCollection } from '../overlays/types';
 import { buildRoutingGraph } from '../routing/graph';
@@ -28,6 +31,7 @@ import { LayersPanel } from './LayersPanel';
 import { LocateButton } from './LocateButton';
 import { ParcelInfoCard } from './ParcelInfoCard';
 import { RoutePanel, type RouteRequestState } from './RoutePanel';
+import { SearchBar } from './SearchBar';
 
 interface MapScreenProps {
   /** Style JSON (offline) or style URL string (dev fallback). */
@@ -53,9 +57,13 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
   const [parcelsIsSample, setParcelsIsSample] = useState(false);
   const [parcelsVisible, setParcelsVisible] = useState(true);
   const [selectedParcel, setSelectedParcel] = useState<ParcelProperties | null>(null);
+  const [searchIndexData, setSearchIndexData] = useState<SearchIndex>([]);
+  const [searchIndexIsSample, setSearchIndexIsSample] = useState(false);
 
   const [routeState, setRouteState] = useState<RouteRequestState | null>(null);
   const [routeDestination, setRouteDestination] = useState<[number, number] | null>(null);
+
+  const cameraRef = useRef<CameraRef>(null);
 
   useEffect(() => {
     loadStructures().then(({ data, isSample }) => {
@@ -69,6 +77,10 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     loadParcels().then(({ data, isSample }) => {
       setParcels(data);
       setParcelsIsSample(isSample);
+    });
+    loadSearchIndex().then(({ index, isSample }) => {
+      setSearchIndexData(index);
+      setSearchIndexIsSample(isSample);
     });
   }, []);
 
@@ -109,11 +121,11 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     setRouteDestination(null);
   }, []);
 
-  // Long-press only — a regular tap must never start routing, so a rider
-  // doesn't drop an accidental route mid-ride by brushing the screen.
-  const handleLongPress = useCallback(
-    (event: NativeSyntheticEvent<PressEvent>) => {
-      const destination = event.nativeEvent.lngLat;
+  // Shared by long-press and search-result selection — both are just
+  // different ways of naming the same "route from here to this point"
+  // request (spec §16).
+  const requestRouteTo = useCallback(
+    (destination: [number, number]) => {
       setSelectedParcel(null);
       setRouteDestination(destination);
 
@@ -142,6 +154,28 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     [locationStatus, currentPosition, routingGraph],
   );
 
+  // Long-press only — a regular tap must never start routing, so a rider
+  // doesn't drop an accidental route mid-ride by brushing the screen.
+  const handleLongPress = useCallback(
+    (event: NativeSyntheticEvent<PressEvent>) => {
+      requestRouteTo(event.nativeEvent.lngLat);
+    },
+    [requestRouteTo],
+  );
+
+  const handleSelectSearchResult = useCallback(
+    (entry: SearchEntry) => {
+      // A search result can be anywhere in the county, well outside the
+      // current viewport — unlike long-press, where the user is already
+      // looking at the point they held. Stop following the GPS position so
+      // the camera move isn't immediately fought by trackUserLocation.
+      setFollowing(false);
+      cameraRef.current?.flyTo({ center: entry.coordinate, zoom: FOLLOW_ZOOM, duration: 1200 });
+      requestRouteTo(entry.coordinate);
+    },
+    [requestRouteTo],
+  );
+
   const waitingForFix = locationStatus === 'granted' && !currentPosition;
 
   return (
@@ -153,6 +187,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         onLongPress={handleLongPress}
       >
         <Camera
+          ref={cameraRef}
           initialViewState={{
             center: SONOMA_CENTER,
             zoom: DEFAULT_ZOOM,
@@ -175,6 +210,11 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
           <RouteOverlay route={routeState.route} destination={routeDestination} />
         )}
       </MapLibreMap>
+      <SearchBar
+        index={searchIndexData}
+        isSample={searchIndexIsSample}
+        onSelect={handleSelectSearchResult}
+      />
       <LayersPanel
         structuresVisible={structuresVisible}
         onToggleStructures={setStructuresVisible}
@@ -221,7 +261,7 @@ const styles = StyleSheet.create({
   },
   banner: {
     position: 'absolute',
-    top: 60,
+    top: 72,
     alignSelf: 'center',
     backgroundColor: '#b5541c',
     borderRadius: 6,

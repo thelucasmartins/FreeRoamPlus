@@ -71,3 +71,18 @@ export const ROADS_FILENAME = 'roads.geojson';
  * §4) and isn't part of this app's schema at all.
  */
 export const PARCELS_FILENAME = 'parcels.geojson';
+
+/**
+ * Filename of the offline search index (spec §16): place names, road names,
+ * and POI names for Sonoma County, built from OSM data at pipeline time.
+ * Only ever contains publicly known/named things — private/unclassified
+ * roads and undocumented structures never get a `name` in the first place
+ * (spec §6), so there's nothing extra to filter out here.
+ */
+export const SEARCH_INDEX_FILENAME = 'search-index.json';
+
+/** Directory (under the app's document dir) for user-generated data — not pipeline output, so kept separate from overlays/. */
+export const USER_DATA_DIR_NAME = 'user-data';
+
+/** Filename of the on-device waypoints/pins store (spec §11). */
+export const WAYPOINTS_FILENAME = 'waypoints.json';

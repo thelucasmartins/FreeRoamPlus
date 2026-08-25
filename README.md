@@ -11,7 +11,7 @@ Offline off-road navigation and terrain-awareness app for adventure riding in So
 - **Trail width classification** — LiDAR-detected paths with no OSM classification are bucketed by cleared width: under 1m as hiking trail (purple), 1–3m as ATV trail (pink), 3m+ as drivable road (green/yellow/red per the rule above). Only drivable-width paths join the routable road network.
 - **Parcel boundaries** — toggleable parcel layer; tap a parcel to see lot size, zoning, and APN (no owner names — that field doesn't exist in this app's data at all). Resource-extraction parcels (timber, mining, milling) are visually flagged separately based on zoning data.
 - **Elevation/grade indicator** — shows incline and steepness along a route or road segment.
-- **Destination selection** — long-press anywhere to route to that exact coordinate, whether or not it falls on a known road; a point with no nearby drivable road/trail still gets a route to the nearest reachable point on the network, with the remaining distance/direction flagged as off-network. Offline name/address search (spec §16) is still to come.
+- **Destination selection** — long-press anywhere to route to that exact coordinate, whether or not it falls on a known road, or search by place/road/POI name in the offline search bar; both lead to the same route request. A point with no nearby drivable road/trail still gets a route to the nearest reachable point on the network, with the remaining distance/direction flagged as off-network.
 - **Waypoints** — drop pins with notes anywhere on the map, saved locally.
 - **Breadcrumb trail** — optional, manually-toggled trail of the current ride for backtracking.
 - **Live GPS tracking** — uses the phone's onboard GPS chip directly, no signal required. A locate button recenters and locks the camera to your position (tap again to release); it also handles permission prompts, a "location off" state with a way to fix it, and an "Acquiring GPS…" indicator during the first fix.
@@ -35,15 +35,15 @@ width-based trail bands — purple for hiking trails under 1m, pink for ATV
 trails 1–3m (step 3); a live GPS position dot with a follow-me camera
 button, permission/settings handling, and a first-fix indicator (step 4); a
 toggleable, tap-for-details parcels layer (size, zoning, APN — never owner
-name) with resource-extraction parcels flagged separately; and long-press
-turn-by-turn routing over the drivable road network with the spec §16
-off-network fallback. All overlays run on bundled placeholder data until the
-real pipeline/GIS output is on-device — see [docs/DATA.md](docs/DATA.md),
-which also covers the vector-tile approach needed for the parcels layer at
-full county scale, and why routing here is a custom on-device graph router
-rather than a compiled Valhalla/GraphHopper binary. Packaging as an
-installable app shell (step 5) is what's left from the build order; offline
-name/address search (spec §16) is the other open piece.
+name) with resource-extraction parcels flagged separately; turn-by-turn
+routing over the drivable road network with the spec §16 off-network
+fallback, reachable by long-press or by an offline name/address/road search
+bar. All overlays run on bundled placeholder data until the real
+pipeline/GIS output is on-device — see [docs/DATA.md](docs/DATA.md), which
+also covers the vector-tile approach needed for the parcels layer at full
+county scale, and why routing here is a custom on-device graph router rather
+than a compiled Valhalla/GraphHopper binary. Packaging as an installable app
+shell (step 5) is what's left from the build order.
 
 ## Running it
 

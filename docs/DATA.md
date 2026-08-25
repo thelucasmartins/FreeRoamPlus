@@ -263,10 +263,52 @@ independent of the app. That's how the pathfinding, the disconnected-graph
 case, and the off-network fallback were actually verified for this change,
 not just type-checked.
 
+## 8. Offline search index (spec §16)
+
+The app looks for a search index at
+`<app documents>/overlays/search-index.json` — a flat JSON array:
+
+```json
+[{ "id": "place:santa-rosa", "name": "Santa Rosa", "kind": "place", "coordinate": [-122.7141, 38.4404] }]
+```
+
+`kind` is `"place"`, `"road"`, or `"poi"` — cosmetic (shown as a label next
+to each result), not used for filtering. This is deliberately a flat
+name-to-coordinate lookup, not a full geocoder: selecting a result flies
+the camera there and requests a route, exactly like a long-press at that
+coordinate (spec §16's tap-to-pin and search are two ways to reach the same
+destination-selection path — see `requestRouteTo()` in
+[src/screens/MapScreen.tsx](../src/screens/MapScreen.tsx)).
+
+**Only publicly known/named things belong in this index** (spec §16, spec
+§6) — but that's enforced structurally elsewhere, not by filtering here.
+Private roads and undocumented structures never get a `name` field in
+`roads.geojson`/`structures.geojson` in the first place (see §5 and §4
+above), so an export process that only indexes named features from those
+two files, plus place/POI names from OSM, can't accidentally leak one.
+
+To produce the real file:
+
+1. Extract place nodes (towns, unincorporated communities) and POI nodes
+   (trailheads, campgrounds, points of interest) tagged with a `name` from
+   the Sonoma County OSM extract.
+2. Add an entry per named feature already present in `roads.geojson` and
+   `structures.geojson` (their `name` field, keeping the same coordinate
+   convention — a representative point, not a full geometry).
+3. Export as a flat JSON array (not GeoJSON — no geometry beyond a single
+   point per entry is needed) named `search-index.json`.
+4. Copy it to the device at `overlays/search-index.json`.
+
+Until this file exists on-device, the search bar matches against bundled
+sample data (see
+[src/overlays/sampleSearchIndex.ts](../src/overlays/sampleSearchIndex.ts))
+covering a handful of real Sonoma County town names plus the same named
+sample roads/structures used elsewhere, so a search result points at the
+same feature already visible on the map. The matching/ranking logic itself
+— [src/search/searchQuery.ts](../src/search/searchQuery.ts) — has zero
+React Native dependencies and was verified standalone under Node with
+`tsx`, same as the routing module.
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
-- Offline search index: OSM place/address/POI names for Sonoma County, built
-  at pipeline time and bundled on-device (spec §16) — tap-to-pin routing is
-  already in (long-press on the map); text search over named places is what
-  remains from spec §16.

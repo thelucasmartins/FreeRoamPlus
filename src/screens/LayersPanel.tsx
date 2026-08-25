@@ -134,7 +134,7 @@ export function LayersPanel({
 const styles = StyleSheet.create({
   panel: {
     position: 'absolute',
-    top: 60,
+    top: 72,
     right: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: 10,
