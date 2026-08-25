@@ -4,6 +4,14 @@ The app renders a local vector-tile database (`sonoma.mbtiles`, OpenMapTiles
 schema) with MapLibre. This is build-time work done on a desktop (spec §9),
 then transferred to the phone once.
 
+**Real pipeline scripts exist for most of this** — see
+[pipeline/](../pipeline/) and its [README](../pipeline/README.md) for what's
+been fetched from real public sources (OSM via Overpass, Sonoma County's own
+ArcGIS parcels service, USGS elevation data) versus what still needs LiDAR
+point-cloud processing, a native tiling toolchain, or both, that this
+environment doesn't have. Each section below is annotated with which case it
+is.
+
 ## 1. Build `sonoma.mbtiles` with Planetiler
 
 Requires Java 21+. Planetiler downloads the OSM extract for you and clips to
@@ -68,10 +76,20 @@ Structures toggle shows bundled placeholder data (see
 the layer is exercisable before the real pipeline runs — the in-app legend
 flags this with a "Sample data" note.
 
-To produce the real file:
+**Real data, partially**: [pipeline/fetchStructures.ts](../pipeline/fetchStructures.ts)
+fetches real OSM building footprints for the whole county via Overpass —
+every `documented: true` structure it produces is real. Confirmed run:
+323,040 documented structures (82,474 named), 106.8MB, tiled into a 4×4
+grid of sub-queries since a single whole-county query 504-timed-out (see
+the script's header comment). It cannot produce any `documented: false`
+(undocumented) structures: that requires LiDAR nDSM elevation-signal
+analysis and the existing structure-detection tool spec §1 says this app
+reuses, neither of which this environment has access to. Run it, then copy
+`data/overlays/structures.geojson` to the device the same way as below —
+or run the real pipeline yourself:
 
 1. Run the existing nDSM structure-detection pipeline over the Sonoma County
-   LiDAR tile set.
+   LiDAR tile set — this is the piece that needs Lucas's own tool.
 2. Cross-reference detections against OSM building footprints + Microsoft
    Building Footprints to set `documented`.
 3. Export as GeoJSON (WGS84) named `structures.geojson`.
@@ -120,13 +138,27 @@ tags qualify). That's a pipeline task — refine the OSM cross-reference logic
 in step 2 below once real tag coverage for the region has been reviewed;
 `roadClassification.ts` itself doesn't need to change for that.
 
+**Real data, partially**: [pipeline/fetchRoads.ts](../pipeline/fetchRoads.ts)
+fetches every `highway=*` way in the county from OSM (119,071 ways) and
+computes real `protectedLand` via an actual point-in-polygon spatial join
+against real Overpass-fetched protected-area boundaries — not a stand-in.
+Run against the app's own `roadClassification.ts`, this produced 63,122
+green / 245 yellow / 55,704 red real roads, including real protected-land
+matches like Armstrong Woods Road (Armstrong Redwoods State Natural
+Reserve). It cannot produce any `lidar`-sourced features (purple/pink
+trail-band detection): that needs point-cloud processing this environment
+doesn't have.
+
 To produce the real file:
 
-1. Run LiDAR road extraction (flat, linear cleared paths) over the Sonoma
-   County tile set, recording cleared width per segment (spec §9 step 3).
-2. Cross-reference against OSM road tags; where a match exists, emit an
-   `osm`-sourced feature with `access`/`protectedLand`/`name` instead of a
-   `lidar`-sourced one.
+1. Run `pipeline/fetchRoads.ts` for the OSM-sourced portion (real, done), or
+   reproduce it yourself against a full `.osm.pbf` extract with `osmium`/
+   `ogr2ogr` if you want offline-only tooling instead of the live Overpass
+   API this script uses.
+2. Run LiDAR road extraction (flat, linear cleared paths) over the Sonoma
+   County tile set, recording cleared width per segment (spec §9 step 3) —
+   this is the piece that's still a real gap; merge its output in as
+   `lidar`-sourced features alongside step 1's `osm`-sourced ones.
 3. Export as GeoJSON (WGS84) named `roads.geojson`.
 4. Copy it to the device at `overlays/roads.geojson` (same manual/Wi-Fi
    transfer approach as the tile database above).
@@ -166,16 +198,34 @@ by cross-referencing the county's Zoning and Land Use layer (timber
 preserve, mineral resource, and similar codes) against parcel boundaries —
 same pipeline-computes-it-once pattern as structures' `documented` flag.
 
+**Real data, whole county**: [pipeline/fetchParcels.ts](../pipeline/fetchParcels.ts)
+queries the county's actual "Parcels Public" FeatureServer directly — real
+APN, real acreage, all 188,492 real parcels. Doing the spec's own "confirm
+zoning and APN fields are present" check turned up a real finding: **this
+layer has no standalone zoning field.** It only carries the Assessor's Use
+Code (`UseCodeDescription`) — related to zoning but not the same thing (what
+the parcel is *used for*, not its zoning district). No public zoning/
+general-plan layer turned up after several searches of the county's GIS
+catalog. The pipeline uses Use Code as the closest real substitute for the
+app's `zoning` field, clearly labeled as such in the script's own comments
+— not silently relabeled as a real zoning designation.
+
+The upside: Use Code values include real `TIMBER PRESERVE ZONE/LIST A/B/C`
+and `AG PRESERVE AND TPZ` entries (TPZ = Timberland Production Zone, almost
+certainly the actual mechanism behind spec §4's "timber preserve" language)
+— confirmed against a real rural sample query. `resourceExtraction` is
+derived from those, real, not a placeholder: 493 of the 188,492 parcels are
+flagged.
+
 To produce the real file:
 
-1. Download the "Parcels Public" layer from gis.sonomacounty.ca.gov as
-   GeoJSON/shapefile.
-2. Confirm the export actually has `zoning` and `APN`/acreage fields present
-   before building against it (spec §4 calls this out explicitly).
-3. Cross-reference against the Zoning and Land Use layer to set
-   `resourceExtraction` for timber/mining/milling parcels.
-4. Export as GeoJSON (WGS84) named `parcels.geojson`.
-5. Copy it to the device at `overlays/parcels.geojson`.
+1. Run `pipeline/fetchParcels.ts` (real, done — whole county, ~60MB).
+2. If a real zoning/general-plan layer turns up later (try PRMD directly,
+   not just the GIS Hub catalog search this pipeline used), swap it in for
+   the Use Code substitute and re-derive `resourceExtraction` from actual
+   zoning codes instead of Use Code text matching.
+3. Copy `data/overlays/parcels.geojson` to the device at
+   `overlays/parcels.geojson` — see the scale warning below first.
 
 Until this file exists on-device, the Parcels toggle shows bundled
 placeholder data (see
@@ -187,8 +237,11 @@ populate the same way.
 
 The spec flags that a parcel layer "previously failed to load/render
 reliably" in an earlier project. The most likely cause at true Sonoma County
-scale: the county's full parcel layer is well over 100,000 features. Loading
-that as one flat GeoJSON file — parsed synchronously into a single JS object
+scale: the county's full parcel layer is 189,239 features, confirmed
+directly against the live service above — not an estimate (188,492 made it
+into `parcels.geojson`; 747 were skipped for missing required fields, see
+the script's own log output). The resulting file is ~60MB. Loading that as
+one flat GeoJSON file — parsed synchronously into a single JS object
 and handed to one `GeoJSONSource`, which is what
 [src/overlays/parcelsStore.ts](../src/overlays/parcelsStore.ts) does today —
 is exactly the kind of thing that stalls or OOMs a phone, and would silently
@@ -273,6 +326,16 @@ not just type-checked.
 
 ## 8. Offline search index (spec §16)
 
+**Real data.** [pipeline/fetchSearchIndex.ts](../pipeline/fetchSearchIndex.ts)
+builds the real index directly from the other real pipeline outputs —
+`loadNamedRoads()` and `loadNamedStructures()` read `roads.geojson` and
+`structures.geojson`'s already-real `name` fields, plus a real Overpass
+query for place/POI nodes (towns, trailheads, campgrounds, parks) across
+the county. Confirmed run: 108,764 entries (1,051 places/POIs, 25,239
+named roads, 82,474 named structures), 12.4MB. Depends on `fetchRoads.ts`
+and `fetchStructures.ts` having already run — see
+[pipeline/README.md](../pipeline/README.md) for run order.
+
 The app looks for a search index at
 `<app documents>/overlays/search-index.json` — a flat JSON array:
 
@@ -318,6 +381,15 @@ React Native dependencies and was verified standalone under Node with
 `tsx`, same as the routing module.
 
 ## 9. Elevation / grade indicator (spec §13)
+
+**Real data.** [pipeline/fetchDem.ts](../pipeline/fetchDem.ts) queries the
+USGS National Map Elevation Point Query Service (EPQS) directly at each
+point of a 46×36 grid across `REGION_BOUNDS` (real elevation values, not a
+bulk raster download — this environment's disk budget doesn't fit one, and
+EPQS makes that unnecessary). Produced `data/overlays/dem.json`: real
+Sonoma County elevations ranging from -127m (below sea level, coastal/bay
+areas) to 1338m (near Mt. St. Helena), 18.6KB. See the header comment for
+why point-query beat bulk DEM download here.
 
 The app looks for an elevation grid at `<app documents>/overlays/dem.json`:
 

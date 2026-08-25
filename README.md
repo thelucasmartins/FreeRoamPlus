@@ -39,15 +39,22 @@ satellite/LiDAR base layers (§3.2–3.3):
 - **Breadcrumb trail (§12)** — off by default, toggle to record, stop/resume/clear independently, in-memory only.
 - **Satellite / LiDAR base layers (§3.2–3.3)** — download-on-demand raster/hillshade base layers, switchable from a bottom-left picker, with a Labels toggle for the §3.4 hybrid view.
 
-All overlays and the DEM/waypoint data run on bundled placeholder data
-until the real pipeline/GIS output is on-device — see
-[docs/DATA.md](docs/DATA.md), which also covers the vector-tile approach
-needed for the parcels layer at full county scale, why routing here is a
-custom on-device graph router rather than a compiled Valhalla/GraphHopper
-binary, and why the satellite/LiDAR layers — unlike every other data
-source in this app — have no synthetic sample data (a fabricated raster
-image wouldn't verify anything real). Packaging as an installable app shell
-(step 5) is the only build-order item left.
+A real data pipeline ([pipeline/](pipeline/), build-order step 9) now
+produces real Sonoma County structures, roads, parcels, elevation, and
+search-index data from live OSM/USGS/county sources — see
+[pipeline/README.md](pipeline/README.md) for confirmed output sizes and
+counts, and [docs/DATA.md](docs/DATA.md) for how each overlay consumes it
+plus what's still a genuine gap in this environment: undocumented
+(LiDAR-flagged) structures and LiDAR-detected trail bands (need point-cloud
+processing this environment doesn't have), and the street/satellite/LiDAR
+hillshade MBTiles tile packages (need Java/GDAL and more disk than this
+environment's budget allows). Until real data is copied onto a device,
+every overlay still falls back to bundled placeholder data so the app is
+exercisable without any of that. `docs/DATA.md` also covers the vector-tile
+approach needed for the parcels layer at full county scale and why routing
+here is a custom on-device graph router rather than a compiled
+Valhalla/GraphHopper binary. Packaging as an installable app shell (step 5)
+is the only build-order item left.
 
 ## Running it
 
