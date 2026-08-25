@@ -27,17 +27,18 @@ const TRAIL_FILTER: FilterSpecification = [
   ['literal', ['purple', 'pink']],
 ];
 /**
- * Public/known roads only (green/yellow) — red (private/unclassified) is
- * deliberately excluded from labeling within this overlay, per spec §6:
- * "Private structures/roads are shown (colored/flagged) but not labeled
- * with identifying info." Purple/pink trails never carry a `name` to begin
- * with (LiDAR-sourced, spec §15), so they're excluded implicitly.
+ * Any category with a `name` gets labeled — including red (private/
+ * unclassified). Confirmed reading of spec §6/§3.1: same as the base
+ * street layer (labelLayers.ts), a road's *name* isn't the owner-identity
+ * information the spec is protecting (that's excluded at the schema level
+ * — see roadTypes.ts and parcelTypes.ts), so this matches how Google Maps
+ * itself labels named private roads and trails. Purple/pink trails never
+ * carry a `name` under the current schema (LiDAR-sourced, spec §15, no
+ * `name` field on LidarRoadProperties) so this filter has no effect on
+ * them today, but doesn't artificially exclude them either if that
+ * changes.
  */
-const PUBLIC_NAMED_FILTER: FilterSpecification = [
-  'all',
-  ['in', ['get', 'category'], ['literal', ['green', 'yellow']]],
-  ['has', 'name'],
-];
+const NAMED_FILTER: FilterSpecification = ['has', 'name'];
 
 /** Green/government, yellow/protected-land, red/private-or-unclassified (spec §5). */
 const DRIVABLE_COLOR: ExpressionSpecification = [
@@ -67,11 +68,10 @@ const TRAIL_COLOR: ExpressionSpecification = [
  * happens in roadClassification.ts before this component ever sees the
  * data — this just paints the `category` property already on each feature.
  *
- * Public roads (green/yellow) with a `name` are labeled, matching how the
- * base street style labels named roads — spec §6. This is this overlay's
- * own label layer, independent of the base style's: it's driven by our
- * `category` classification rather than raw OSM data, so a private road
- * never gets labeled here even if OSM happens to have a name tag for it.
+ * Any road/trail with a `name` is labeled, regardless of category —
+ * consistent with the base street layer and with how Google Maps itself
+ * labels named private roads and trails (spec §3.1/§6; see the confirmed
+ * reasoning at NAMED_FILTER above).
  */
 export function RoadsOverlay({ data, glyphsUrl }: RoadsOverlayProps) {
   return (
@@ -103,10 +103,10 @@ export function RoadsOverlay({ data, glyphsUrl }: RoadsOverlayProps) {
       />
       {glyphsUrl && (
         <Layer
-          id="roads-public-label"
+          id="roads-name-label"
           type="symbol"
           source={SOURCE_ID}
-          filter={PUBLIC_NAMED_FILTER}
+          filter={NAMED_FILTER}
           minzoom={13}
           layout={{
             'symbol-placement': 'line',

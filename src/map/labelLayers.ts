@@ -3,25 +3,15 @@
  * style (spec §3.1) and hybrid mode — street labels over satellite or
  * LiDAR (spec §3.4) — so the two don't drift out of sync with each other.
  *
- * Judgment call worth flagging explicitly: this labels straight from the
- * raw OpenMapTiles `transportation_name`/`place` vector data, unfiltered by
- * this app's own private/public road classification (roadClassification.ts)
- * — a private road that happens to carry an OSM `name` tag (common in
- * reality: many gated/private roads and driveways are named in OSM) will
- * still show its name here. That's read as consistent with spec §3.1's own
- * framing ("standard vector/road map view, labeled like Google Maps ...
- * using OpenStreetMap data") — real Google Maps/OSM renderers label named
- * private roads too, since a road *name* isn't the owner-identity
- * information spec §4/§6 are actually protecting (see the parcels schema,
- * which excludes owner name entirely but keeps APN/zoning/acreage as
- * public record). The roads *overlay* (RoadsOverlay.tsx) is the one place
- * that applies this app's own red/private classification to labeling, and
- * it deliberately never labels a red-category road regardless of what OSM
- * calls it. If the neutral base-layer behavior here should instead
- * suppress names on roads this app has classified as private, that's a
- * one-line change: filter buildLabelLayers' `label-road` layer by
- * cross-referencing roads-source, the same way RoadsOverlay's own label
- * layer already does — flag it if that's the intended reading.
+ * Confirmed reading (spec §3.1/§6): labels straight from the raw
+ * OpenMapTiles `transportation_name`/`place` vector data, unfiltered by
+ * this app's own private/public road classification — a private road with
+ * an OSM `name` tag still shows its name here, same as real Google Maps
+ * does. A road/trail *name* isn't the owner-identity information spec
+ * §4/§6 actually protect (that's excluded at the schema level entirely —
+ * see parcelTypes.ts). RoadsOverlay.tsx's own label layer applies the same
+ * any-category-with-a-name rule, so this base layer and the roads overlay
+ * are consistent with each other.
  */
 
 /** Source id these layers expect: the OpenMapTiles vector source, wherever it's declared in the containing style. */
