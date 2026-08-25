@@ -346,7 +346,7 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
         {parcelsVisible && parcels && (
           <ParcelsOverlay data={parcels} onSelect={handleSelectParcel} />
         )}
-        {roadsVisible && roads && <RoadsOverlay data={roads} />}
+        {roadsVisible && roads && <RoadsOverlay data={roads} glyphsUrl={glyphsUrl} />}
         {structuresVisible && structures && (
           <StructuresOverlay data={structures} glyphsUrl={glyphsUrl} />
         )}

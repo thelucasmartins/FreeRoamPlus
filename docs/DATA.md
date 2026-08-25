@@ -138,6 +138,14 @@ legend flags this with a "Sample data" note. Only the drivable band (green/
 yellow/red) feeds the routing graph (§7 below); purple/pink trails are
 display-only per spec §15 and are never part of a computed route.
 
+**Labeling (spec §6)**: `RoadsOverlay.tsx` has its own label layer for named
+green/yellow roads — deliberately excluding red (private/unclassified), so
+a road this app has classified as private never gets labeled by name within
+this overlay, regardless of what raw OSM data might say. This is separate
+from the base street style's own labels (see the judgment-call note in
+[src/map/labelLayers.ts](../src/map/labelLayers.ts) about why *those* aren't
+filtered the same way).
+
 ## 6. Parcels overlay (spec §4)
 
 The app looks for parcel boundaries at

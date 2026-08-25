@@ -9,9 +9,12 @@ import type { ClassifiedRoadFeatureCollection } from '../overlays/roadTypes';
 
 interface RoadsOverlayProps {
   data: ClassifiedRoadFeatureCollection;
+  /** file:// glyph template; the road-name label layer is omitted entirely when absent. */
+  glyphsUrl: string | null;
 }
 
 const SOURCE_ID = 'roads-source';
+const FONT_REGULAR = ['Noto Sans Regular'];
 
 const DRIVABLE_FILTER: FilterSpecification = [
   'in',
@@ -22,6 +25,18 @@ const TRAIL_FILTER: FilterSpecification = [
   'in',
   ['get', 'category'],
   ['literal', ['purple', 'pink']],
+];
+/**
+ * Public/known roads only (green/yellow) — red (private/unclassified) is
+ * deliberately excluded from labeling within this overlay, per spec §6:
+ * "Private structures/roads are shown (colored/flagged) but not labeled
+ * with identifying info." Purple/pink trails never carry a `name` to begin
+ * with (LiDAR-sourced, spec §15), so they're excluded implicitly.
+ */
+const PUBLIC_NAMED_FILTER: FilterSpecification = [
+  'all',
+  ['in', ['get', 'category'], ['literal', ['green', 'yellow']]],
+  ['has', 'name'],
 ];
 
 /** Green/government, yellow/protected-land, red/private-or-unclassified (spec §5). */
@@ -51,8 +66,14 @@ const TRAIL_COLOR: ExpressionSpecification = [
  * distinct from the vehicle-routable road network. Classification itself
  * happens in roadClassification.ts before this component ever sees the
  * data — this just paints the `category` property already on each feature.
+ *
+ * Public roads (green/yellow) with a `name` are labeled, matching how the
+ * base street style labels named roads — spec §6. This is this overlay's
+ * own label layer, independent of the base style's: it's driven by our
+ * `category` classification rather than raw OSM data, so a private road
+ * never gets labeled here even if OSM happens to have a name tag for it.
  */
-export function RoadsOverlay({ data }: RoadsOverlayProps) {
+export function RoadsOverlay({ data, glyphsUrl }: RoadsOverlayProps) {
   return (
     <GeoJSONSource id={SOURCE_ID} data={data}>
       <Layer
@@ -80,6 +101,26 @@ export function RoadsOverlay({ data }: RoadsOverlayProps) {
           'line-dasharray': [2, 1.5],
         }}
       />
+      {glyphsUrl && (
+        <Layer
+          id="roads-public-label"
+          type="symbol"
+          source={SOURCE_ID}
+          filter={PUBLIC_NAMED_FILTER}
+          minzoom={13}
+          layout={{
+            'symbol-placement': 'line',
+            'text-field': ['get', 'name'],
+            'text-font': FONT_REGULAR,
+            'text-size': 11,
+          }}
+          paint={{
+            'text-color': '#5d5347',
+            'text-halo-color': '#f4f1ea',
+            'text-halo-width': 1.2,
+          }}
+        />
+      )}
     </GeoJSONSource>
   );
 }

@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import type { ParcelProperties } from '../overlays/parcelTypes';
+import { BottomCard } from './BottomCard';
 
 interface ParcelInfoCardProps {
   parcel: ParcelProperties;
@@ -13,14 +14,7 @@ interface ParcelInfoCardProps {
  */
 export function ParcelInfoCard({ parcel, onDismiss }: ParcelInfoCardProps) {
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.apn}>APN {parcel.apn}</Text>
-        <Pressable onPress={onDismiss} hitSlop={8} accessibilityLabel="Close parcel details">
-          <Text style={styles.close}>×</Text>
-        </Pressable>
-      </View>
-
+    <BottomCard title={`APN ${parcel.apn}`} onDismiss={onDismiss} dismissLabel="Close parcel details">
       {parcel.resourceExtraction && (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>Resource-extraction land</Text>
@@ -35,41 +29,11 @@ export function ParcelInfoCard({ parcel, onDismiss }: ParcelInfoCardProps) {
         <Text style={styles.label}>Zoning</Text>
         <Text style={styles.value}>{parcel.zoning}</Text>
       </View>
-    </View>
+    </BottomCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.97)',
-    borderRadius: 12,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  apn: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#3d3a34',
-  },
-  close: {
-    fontSize: 22,
-    color: '#8a7a66',
-    lineHeight: 22,
-    paddingHorizontal: 4,
-  },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: '#b5541c',

@@ -1,5 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { floatingControlStyles } from './floatingControlStyles';
+
 interface BreadcrumbButtonProps {
   recording: boolean;
   hasPoints: boolean;
@@ -19,11 +21,11 @@ export function BreadcrumbButton({ recording, hasPoints, onToggle, onClear }: Br
     <View style={styles.wrapper}>
       {hasPoints && (
         <Pressable onPress={onClear} hitSlop={8} accessibilityLabel="Clear breadcrumb trail">
-          <Text style={styles.clearLink}>Clear trail</Text>
+          <Text style={floatingControlStyles.badge}>Clear trail</Text>
         </Pressable>
       )}
       <Pressable
-        style={[styles.button, recording && styles.buttonRecording]}
+        style={[floatingControlStyles.button, recording && styles.buttonRecording]}
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -46,29 +48,6 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 86,
     alignItems: 'flex-end',
-  },
-  clearLink: {
-    fontSize: 11,
-    color: '#5d5347',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 6,
-    overflow: 'hidden',
-  },
-  button: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
   buttonRecording: {
     backgroundColor: '#a02c2c',

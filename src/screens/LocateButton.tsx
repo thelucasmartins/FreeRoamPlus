@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { LocationPermissionStatus } from '../location/useUserLocation';
+import { floatingControlStyles } from './floatingControlStyles';
 
 interface LocateButtonProps {
   status: LocationPermissionStatus;
@@ -30,10 +31,10 @@ export function LocateButton({ status, servicesEnabled, following, onPress }: Lo
   return (
     <View style={styles.wrapper}>
       {status === 'denied' && (
-        <Text style={styles.hint}>{servicesEnabled ? 'Location off' : 'GPS off'}</Text>
+        <Text style={floatingControlStyles.badge}>{servicesEnabled ? 'Location off' : 'GPS off'}</Text>
       )}
       <Pressable
-        style={[styles.button, active && styles.buttonActive]}
+        style={[floatingControlStyles.button, active && styles.buttonActive]}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -62,29 +63,6 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 28,
     alignItems: 'flex-end',
-  },
-  hint: {
-    fontSize: 11,
-    color: '#5d5347',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 6,
-    overflow: 'hidden',
-  },
-  button: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
   buttonActive: {
     backgroundColor: '#4a6b3a',

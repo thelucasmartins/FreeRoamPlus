@@ -3,8 +3,9 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { ElevationProfile } from '../elevation/types';
 import { compassLabel } from '../routing/geo';
-import { formatDistance } from '../routing/formatting';
+import { formatDistance, formatFeet } from '../routing/formatting';
 import type { RouteResult } from '../routing/router';
+import { BottomCard } from './BottomCard';
 import { ElevationChart } from './ElevationChart';
 
 export type RouteRequestState =
@@ -32,10 +33,6 @@ const ERROR_MESSAGES: Record<'no-graph-data' | 'no-path-found', string> = {
   'no-graph-data': 'No road network loaded to route on',
   'no-path-found': 'No route found — that point isn’t reachable from here',
 };
-
-function formatFeet(meters: number): string {
-  return `${Math.round(meters * 3.28084)} ft`;
-}
 
 /**
  * Bottom info panel for a long-press/search route request (spec §7, §16).
@@ -72,14 +69,7 @@ export function RoutePanel({
   };
 
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Route</Text>
-        <Pressable onPress={onDismiss} hitSlop={8} accessibilityLabel="Clear route">
-          <Text style={styles.close}>×</Text>
-        </Pressable>
-      </View>
-
+    <BottomCard title="Route" onDismiss={onDismiss} dismissLabel="Clear route">
       {(state.kind === 'needs-location' || state.kind === 'waiting-for-fix') && (
         <Text style={styles.message}>{MESSAGES[state.kind]}</Text>
       )}
@@ -152,41 +142,11 @@ export function RoutePanel({
           </Pressable>
         )}
       </View>
-    </View>
+    </BottomCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.97)',
-    borderRadius: 12,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#3d3a34',
-  },
-  close: {
-    fontSize: 22,
-    color: '#8a7a66',
-    lineHeight: 22,
-    paddingHorizontal: 4,
-  },
   message: {
     marginTop: 8,
     fontSize: 13,
