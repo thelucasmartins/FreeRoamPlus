@@ -40,3 +40,14 @@ export const TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/sonoma.mbtiles';
  * on the device yet. Never used once the MBTiles file is present.
  */
 export const DEV_FALLBACK_STYLE_URL = 'https://demotiles.maplibre.org/style.json';
+
+/** Directory (under the app's document dir) where overlay GeoJSON lives. */
+export const OVERLAYS_DIR_NAME = 'overlays';
+
+/**
+ * Filename of the structures overlay (spec §4, §9): building footprints
+ * classified as documented (known, from OSM/Microsoft footprints) or
+ * undocumented (LiDAR-flagged, no public record), exported by the desktop
+ * nDSM pipeline.
+ */
+export const STRUCTURES_FILENAME = 'structures.geojson';

@@ -50,11 +50,43 @@ Get prebuilt Noto Sans glyphs from the OpenMapTiles fonts release
 in-app download path for fonts is a follow-up task — until then the map
 renders unlabeled, which is fine for verifying step 1 of the build order.
 
+## 4. Structures overlay (build-order step 2)
+
+The app looks for building footprints at
+`<app documents>/overlays/structures.geojson` — a `FeatureCollection` of
+`Polygon`/`MultiPolygon` features, each with:
+
+```json
+{ "documented": true, "name": "optional, documented structures only" }
+```
+
+`documented: true` means the footprint matched a public record (OSM or
+Microsoft Building Footprints); `false` means LiDAR flagged an elevation
+signature with no match (spec §4). Until this file exists on-device, the
+Structures toggle shows bundled placeholder data (see
+[src/overlays/sampleStructures.ts](../src/overlays/sampleStructures.ts)) so
+the layer is exercisable before the real pipeline runs — the in-app legend
+flags this with a "Sample data" note.
+
+To produce the real file:
+
+1. Run the existing nDSM structure-detection pipeline over the Sonoma County
+   LiDAR tile set.
+2. Cross-reference detections against OSM building footprints + Microsoft
+   Building Footprints to set `documented`.
+3. Export as GeoJSON (WGS84) named `structures.geojson`.
+4. Copy it to the device at `overlays/structures.geojson` (same manual/Wi-Fi
+   transfer approach as the tile database above — an in-app download path
+   for overlays, alongside tiles, is a follow-up task).
+
+Only documented structures should carry a `name` — undocumented ones are
+never labeled with identifying info (spec §6).
+
 ## Later pipeline stages (not needed for basic rendering)
 
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
-- Structures / roads / parcels overlays: GeoJSON exports from the existing
-  nDSM pipeline and Sonoma County GIS (spec §9).
+- Roads / parcels overlays: GeoJSON exports from the existing nDSM pipeline
+  and Sonoma County GIS (spec §9).
 - Road extraction bucketing: LiDAR-detected paths lacking OSM classification
   get split by cleared width into hiking trail / ATV trail / drivable road
   before the green/yellow/red assignment (spec §15); only the drivable band

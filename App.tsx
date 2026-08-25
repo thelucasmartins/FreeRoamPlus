@@ -24,9 +24,13 @@ export default function App() {
 
   let content;
   if (offlineStyle) {
-    content = <MapScreen mapStyle={offlineStyle} offline />;
+    content = (
+      <MapScreen mapStyle={offlineStyle} offline glyphsUrl={tileStatus.glyphsUrl} />
+    );
   } else if (useOnlineFallback) {
-    content = <MapScreen mapStyle={DEV_FALLBACK_STYLE_URL} offline={false} />;
+    content = (
+      <MapScreen mapStyle={DEV_FALLBACK_STYLE_URL} offline={false} glyphsUrl={null} />
+    );
   } else {
     content = (
       <SetupScreen

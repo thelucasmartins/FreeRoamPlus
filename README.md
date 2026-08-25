@@ -24,10 +24,14 @@ Everything — map tiles, routing graph, LiDAR-derived layers, and parcel data �
 
 🚧 In active development. See [offline-nav-lidar-spec.md](offline-nav-lidar-spec.md) for the full project specification.
 
-Build-order step 1 (offline map rendering) is scaffolded: an Expo/React Native
-app that renders a local Sonoma County MBTiles database with MapLibre, fully
-offline once the tile file is on the device. Routing, overlays, and the other
-layers come next.
+Build-order step 1 (offline map rendering) is done: an Expo/React Native app
+that renders a local Sonoma County MBTiles database with MapLibre, fully
+offline once the tile file is on the device. Step 2 (structures overlay) is
+also in: a toggleable layer distinguishing documented buildings (blue) from
+LiDAR-flagged undocumented ones (red, dashed outline), backed by bundled
+placeholder data until the real nDSM pipeline output is on-device — see
+[docs/DATA.md](docs/DATA.md). Road color-coding, GPS live-tracking, and
+packaging are next.
 
 ## Running it
 
@@ -55,7 +59,7 @@ builds run on a Mac.
 - App shell: React Native (Expo, TypeScript)
 - Map rendering: MapLibre React Native reading a local MBTiles (SQLite) tile store via `mbtiles://`
 - Routing (planned): Valhalla or GraphHopper (on-device)
-- Overlay data (planned): GeoJSON (structures, roads, parcels)
+- Overlay data: GeoJSON — structures overlay implemented, roads/parcels planned
 - Data sources: OpenStreetMap (via Planetiler), California statewide LiDAR, Microsoft Building Footprints, Sonoma County GIS (Parcels Public, Zoning & Land Use)
 
 ## Scope
