@@ -5,7 +5,7 @@ Offline off-road navigation and terrain-awareness app for adventure riding in So
 ## What it does
 
 - **Turn-by-turn offline routing** — routes over the drivable (green/yellow/red) road network, including private and unclassified roads, with an on-device A* graph router (see [docs/DATA.md](docs/DATA.md) for why this isn't literally a compiled Valhalla/GraphHopper binary yet). Long-press anywhere to route there from your position; a regular tap never triggers routing.
-- **Multiple map layers** — street, satellite, LiDAR (hillshade/nDSM), and hybrid views, all pre-rendered and stored locally.
+- **Multiple base map layers** — street (vector, always available), satellite, and LiDAR hillshade, each a separate raster/vector MBTiles file downloaded on demand from the base-layer picker; a Labels toggle overlays street names on satellite/LiDAR for a hybrid view. All pre-rendered and stored locally, switchable with no network call.
 - **Structure detection** — flags man-made buildings from LiDAR nDSM data, distinguishing known/documented structures from undocumented ones not present in public footprint databases.
 - **Road classification** — color-coded by type: green (public/government-maintained), yellow (national forest/protected land), red (private or unclassified/undocumented).
 - **Trail width classification** — LiDAR-detected paths with no OSM classification are bucketed by cleared width: under 1m as hiking trail (purple), 1–3m as ATV trail (pink), 3m+ as drivable road (green/yellow/red per the rule above). Only drivable-width paths join the routable road network.
@@ -25,7 +25,8 @@ Everything — map tiles, routing graph, LiDAR-derived layers, and parcel data �
 🚧 In active development. See [offline-nav-lidar-spec.md](offline-nav-lidar-spec.md) for the full project specification.
 
 Build-order steps 1–4 are done, plus parcels (§4), routing (§7), search
-(§16), elevation (§13), waypoints (§11), and breadcrumb trail (§12):
+(§16), elevation (§13), waypoints (§11), breadcrumb trail (§12), and the
+satellite/LiDAR base layers (§3.2–3.3):
 
 - **Step 1** — offline MBTiles base map via MapLibre, fully offline once the tile file is on-device.
 - **Step 2** — toggleable structures layer: documented buildings (blue) vs. LiDAR-flagged undocumented ones (red, dashed outline).
@@ -36,15 +37,17 @@ Build-order steps 1–4 are done, plus parcels (§4), routing (§7), search
 - **Elevation (§13)** — grade/profile chart for the active route, colored by steepness.
 - **Waypoints (§11)** — save/view/delete pins with notes from the route panel, persisted on-device.
 - **Breadcrumb trail (§12)** — off by default, toggle to record, stop/resume/clear independently, in-memory only.
+- **Satellite / LiDAR base layers (§3.2–3.3)** — download-on-demand raster/hillshade base layers, switchable from a bottom-left picker, with a Labels toggle for the §3.4 hybrid view.
 
 All overlays and the DEM/waypoint data run on bundled placeholder data
 until the real pipeline/GIS output is on-device — see
 [docs/DATA.md](docs/DATA.md), which also covers the vector-tile approach
-needed for the parcels layer at full county scale, and why routing here is
-a custom on-device graph router rather than a compiled Valhalla/GraphHopper
-binary. Packaging as an installable app shell (step 5) is what's left from
-the build order; remaining spec items not yet started are the satellite and
-LiDAR hillshade base layers (§3.2–3.3).
+needed for the parcels layer at full county scale, why routing here is a
+custom on-device graph router rather than a compiled Valhalla/GraphHopper
+binary, and why the satellite/LiDAR layers — unlike every other data
+source in this app — have no synthetic sample data (a fabricated raster
+image wouldn't verify anything real). Packaging as an installable app shell
+(step 5) is the only build-order item left.
 
 ## Running it
 
@@ -73,7 +76,7 @@ builds run on a Mac.
 - Map rendering: MapLibre React Native reading a local MBTiles (SQLite) tile store via `mbtiles://`
 - Routing: custom on-device A* graph router over the classified road network (see docs/DATA.md for why not Valhalla/GraphHopper yet)
 - Overlay data: GeoJSON — structures, roads/trails, and parcels overlays implemented
-- Data sources: OpenStreetMap (via Planetiler), California statewide LiDAR, Microsoft Building Footprints, Sonoma County GIS (Parcels Public, Zoning & Land Use)
+- Data sources: OpenStreetMap (via Planetiler), California statewide LiDAR, aerial/satellite imagery (e.g. NAIP), Microsoft Building Footprints, Sonoma County GIS (Parcels Public, Zoning & Land Use)
 
 ## Scope
 

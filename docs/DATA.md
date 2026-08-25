@@ -379,6 +379,49 @@ trail; if a "save this ride" feature is wanted later, that's a new,
 explicit user action (parallel to waypoints' save flow), not something
 breadcrumb recording should do implicitly.
 
-## Later pipeline stages (not needed for basic rendering)
+## 10. Satellite and LiDAR hillshade base layers (spec §3.2, §3.3)
 
-- Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
+Two more base layers alongside street (spec §3.1), selectable from the
+`BaseLayerSelector` pill (bottom-left) — mutually exclusive with each
+other, unlike the combinable overlays in §4-6 above. Each is a separate
+raster MBTiles file, downloaded on demand with the same one-time-over-Wi-Fi
+mechanism as `sonoma.mbtiles` (step 2 above), via
+[src/offline/baseLayerTiles.ts](../src/offline/baseLayerTiles.ts) — built
+on the same generic tile-set management
+([src/offline/tileSets.ts](../src/offline/tileSets.ts)) `tileStore.ts` was
+refactored onto. Neither blocks using the app: only street is required
+(App.tsx gates on it before `MapScreen` ever mounts), so a missing
+satellite or LiDAR file just means that one segment shows a download
+prompt instead of switching.
+
+**Satellite** (`tiles/satellite.mbtiles`) — plain `raster` tiles, no
+special encoding. Produce from aerial imagery (e.g. NAIP for California)
+clipped to the Sonoma County bounding box and tiled with `gdal2tiles.py`
+or `gdalwarp` + `gdal_translate` into an MBTiles output.
+
+**LiDAR hillshade** (`tiles/lidar-hillshade.mbtiles`) — `raster-dem` tiles
+in Terrarium encoding (`encoding: "terrarium"` in
+[src/map/rasterStyles.ts](../src/map/rasterStyles.ts)), decoded and shaded
+by MapLibre itself via a `hillshade` layer — there's no separate
+pre-rendered hillshade image to generate. Derive from the same DEM data
+already producing `dem.json` (spec §13): resample to a raster grid, encode
+elevation into RGB per the Terrarium spec (`(R*256 + G + B/256) - 32768`
+meters), and tile with `rio-rgbify` or `gdal2tiles.py --profile=terrarium`.
+
+**Hybrid mode** (spec §3.4: "street labels over satellite or LiDAR") is
+the Labels toggle shown whenever Satellite or LiDAR is active — it adds the
+same `openmaptiles` vector source and label layers from
+[src/map/labelLayers.ts](../src/map/labelLayers.ts) that the street style
+uses, so road/place names read consistently no matter which base layer
+they're drawn over. Requires the street `sonoma.mbtiles` to be on-device
+too (for the label source) — if it isn't yet, the toggle exists but has no
+effect. No new file to produce for this: it reuses `sonoma.mbtiles`
+entirely.
+
+Unlike the overlay/search/DEM data above, no synthetic sample data ships
+for these two — a fabricated "fake satellite photo" or fake terrain
+wouldn't actually verify anything about the real raster/hillshade
+rendering pipeline, just prove a placeholder color renders. The
+source/style-generation code (`rasterStyles.ts`, `baseLayerTiles.ts`) is
+complete and type-checked; seeing it actually render needs the real
+MBTiles files above and a device or simulator.

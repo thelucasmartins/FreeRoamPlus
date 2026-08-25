@@ -25,11 +25,21 @@ export default function App() {
   let content;
   if (offlineStyle) {
     content = (
-      <MapScreen mapStyle={offlineStyle} offline glyphsUrl={tileStatus.glyphsUrl} />
+      <MapScreen
+        streetMapStyle={offlineStyle}
+        streetMbtilesUrl={tileStatus.mbtilesUrl}
+        offline
+        glyphsUrl={tileStatus.glyphsUrl}
+      />
     );
   } else if (useOnlineFallback) {
     content = (
-      <MapScreen mapStyle={DEV_FALLBACK_STYLE_URL} offline={false} glyphsUrl={null} />
+      <MapScreen
+        streetMapStyle={DEV_FALLBACK_STYLE_URL}
+        streetMbtilesUrl={null}
+        offline={false}
+        glyphsUrl={null}
+      />
     );
   } else {
     content = (

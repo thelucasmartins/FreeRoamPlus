@@ -44,6 +44,28 @@ export const TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/sonoma.mbtiles';
  */
 export const DEV_FALLBACK_STYLE_URL = 'https://demotiles.maplibre.org/style.json';
 
+/**
+ * Filename of the satellite base layer (spec §3.2): raw aerial/satellite
+ * imagery, no overlays. A raster MBTiles file, same delivery mechanism as
+ * the street database — see docs/DATA.md.
+ */
+export const SATELLITE_MBTILES_FILENAME = 'satellite.mbtiles';
+
+/** One-time download source for the satellite tile database — see TILE_DOWNLOAD_URL for the dev-serving pattern. */
+export const SATELLITE_TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/satellite.mbtiles';
+
+/**
+ * Filename of the LiDAR hillshade base layer (spec §3.3): a raster-dem
+ * (Terrain-RGB-encoded) MBTiles file derived from the same LiDAR/DEM data
+ * as the nDSM and elevation-grid layers. MapLibre decodes and shades this
+ * on-device via a `hillshade` layer — no separate pre-rendered hillshade
+ * image needed.
+ */
+export const LIDAR_MBTILES_FILENAME = 'lidar-hillshade.mbtiles';
+
+/** One-time download source for the LiDAR hillshade tile database. */
+export const LIDAR_TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/lidar-hillshade.mbtiles';
+
 /** Directory (under the app's document dir) where overlay GeoJSON lives. */
 export const OVERLAYS_DIR_NAME = 'overlays';
 

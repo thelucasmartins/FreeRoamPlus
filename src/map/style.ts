@@ -12,6 +12,8 @@
 
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 
+import { buildLabelLayers, STREET_LABELS_SOURCE_ID } from './labelLayers';
+
 interface OfflineStyleOptions {
   /** mbtiles:// URL of the on-device tile database. */
   mbtilesUrl: string;
@@ -23,8 +25,7 @@ interface OfflineStyleOptions {
   glyphsUrl: string | null;
 }
 
-const SOURCE = 'openmaptiles';
-const FONT_REGULAR = ['Noto Sans Regular'];
+const SOURCE = STREET_LABELS_SOURCE_ID;
 
 export function buildOfflineStyle({
   mbtilesUrl,
@@ -168,53 +169,7 @@ export function buildOfflineStyle({
     },
   ];
 
-  if (glyphsUrl) {
-    layers.push(
-      {
-        id: 'label-road',
-        type: 'symbol',
-        source: SOURCE,
-        'source-layer': 'transportation_name',
-        minzoom: 13,
-        layout: {
-          'symbol-placement': 'line',
-          'text-field': ['get', 'name'],
-          'text-font': FONT_REGULAR,
-          'text-size': 11,
-        },
-        paint: {
-          'text-color': '#5d5347',
-          'text-halo-color': '#f4f1ea',
-          'text-halo-width': 1.2,
-        },
-      },
-      {
-        id: 'label-place',
-        type: 'symbol',
-        source: SOURCE,
-        'source-layer': 'place',
-        filter: ['in', ['get', 'class'], ['literal', ['city', 'town', 'village', 'hamlet']]],
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': FONT_REGULAR,
-          'text-size': [
-            'match',
-            ['get', 'class'],
-            'city',
-            16,
-            'town',
-            13,
-            11,
-          ],
-        },
-        paint: {
-          'text-color': '#3d3a34',
-          'text-halo-color': '#f4f1ea',
-          'text-halo-width': 1.5,
-        },
-      },
-    );
-  }
+  layers.push(...buildLabelLayers(glyphsUrl));
 
   return {
     version: 8,

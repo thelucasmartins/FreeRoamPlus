@@ -18,10 +18,17 @@ import type { ElevationGrid } from '../elevation/types';
 import { useUserLocation } from '../location/useUserLocation';
 import { BreadcrumbOverlay } from '../map/BreadcrumbOverlay';
 import { ParcelsOverlay } from '../map/ParcelsOverlay';
+import { buildLidarStyle, buildSatelliteStyle } from '../map/rasterStyles';
 import { RoadsOverlay } from '../map/RoadsOverlay';
 import { RouteOverlay } from '../map/RouteOverlay';
 import { StructuresOverlay } from '../map/StructuresOverlay';
 import { WaypointsOverlay } from '../map/WaypointsOverlay';
+import {
+  downloadLidarTiles,
+  downloadSatelliteTiles,
+  getLidarStatus,
+  getSatelliteStatus,
+} from '../offline/baseLayerTiles';
 import type { ParcelFeatureCollection, ParcelProperties } from '../overlays/parcelTypes';
 import { loadParcels } from '../overlays/parcelsStore';
 import { loadRoads } from '../overlays/roadsStore';
@@ -35,6 +42,7 @@ import { buildRoutingGraph } from '../routing/graph';
 import { computeRoute } from '../routing/router';
 import type { Waypoint } from '../waypoints/types';
 import { createWaypoint, loadWaypoints, saveWaypoints } from '../waypoints/waypointsStore';
+import { BaseLayerSelector, type BaseLayerId } from './BaseLayerSelector';
 import { BreadcrumbButton } from './BreadcrumbButton';
 import { LayersPanel } from './LayersPanel';
 import { LocateButton } from './LocateButton';
@@ -47,15 +55,17 @@ import { WaypointInfoCard } from './WaypointInfoCard';
 const MIN_BREADCRUMB_DISPLACEMENT_METERS = 5;
 
 interface MapScreenProps {
-  /** Style JSON (offline) or style URL string (dev fallback). */
-  mapStyle: StyleSpecification | string;
-  /** Whether the style being shown is the offline one. */
+  /** Street base style — style JSON when offline, or the dev-fallback style URL. */
+  streetMapStyle: StyleSpecification | string;
+  /** mbtiles:// URL of the street vector database, for hybrid-mode labels — null when offline tiles aren't ready (dev fallback). */
+  streetMbtilesUrl: string | null;
+  /** Whether the street style being shown is the offline one. */
   offline: boolean;
-  /** file:// glyph template shared with the base style, if fonts are on-device. */
+  /** file:// glyph template shared with every base style, if fonts are on-device. */
   glyphsUrl: string | null;
 }
 
-export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
+export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl }: MapScreenProps) {
   const { status: locationStatus, servicesEnabled, requestOrOpenSettings } = useUserLocation();
   const currentPosition = useCurrentPosition({ enabled: locationStatus === 'granted' });
   const [following, setFollowing] = useState(false);
@@ -84,6 +94,16 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
   // track, so there's no unwanted location history sitting on disk.
   const [breadcrumbRecording, setBreadcrumbRecording] = useState(false);
   const [breadcrumbPoints, setBreadcrumbPoints] = useState<[number, number][]>([]);
+
+  // Base layer (spec §3): street is the default and only one guaranteed to
+  // exist (App.tsx gates the whole app on it). Satellite/LiDAR are optional
+  // raster layers downloaded on demand — see BaseLayerSelector.
+  const [baseLayer, setBaseLayer] = useState<BaseLayerId>('street');
+  const [labelsEnabled, setLabelsEnabled] = useState(false);
+  const [satelliteStatus, setSatelliteStatus] = useState(() => getSatelliteStatus());
+  const [satelliteDownloading, setSatelliteDownloading] = useState(false);
+  const [lidarStatus, setLidarStatus] = useState(() => getLidarStatus());
+  const [lidarDownloading, setLidarDownloading] = useState(false);
 
   const cameraRef = useRef<CameraRef>(null);
 
@@ -115,6 +135,44 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     if (!demGrid || routeState?.kind !== 'result') return null;
     return buildElevationProfile(demGrid, routeState.route.onNetworkCoordinates);
   }, [demGrid, routeState]);
+
+  // The style actually handed to MapLibre — street passes through
+  // untouched (including the dev-fallback online style), satellite/LiDAR
+  // are built fresh whenever the layer, labels toggle, or their tile
+  // status changes. Falls back to street if a raster layer is selected but
+  // somehow isn't ready (shouldn't happen — selecting one requires it to
+  // already be ready — but this keeps the map from ever rendering nothing).
+  const activeMapStyle = useMemo(() => {
+    const hybridLabels = { streetMbtilesUrl: labelsEnabled ? streetMbtilesUrl : null, glyphsUrl };
+
+    if (baseLayer === 'satellite' && satelliteStatus.ready && satelliteStatus.mbtilesUrl) {
+      return buildSatelliteStyle({ satelliteMbtilesUrl: satelliteStatus.mbtilesUrl, ...hybridLabels });
+    }
+    if (baseLayer === 'lidar' && lidarStatus.ready && lidarStatus.mbtilesUrl) {
+      return buildLidarStyle({ lidarMbtilesUrl: lidarStatus.mbtilesUrl, ...hybridLabels });
+    }
+    return streetMapStyle;
+  }, [baseLayer, satelliteStatus, lidarStatus, labelsEnabled, streetMbtilesUrl, glyphsUrl, streetMapStyle]);
+
+  const handleDownloadSatellite = useCallback(() => {
+    setSatelliteDownloading(true);
+    downloadSatelliteTiles()
+      .then((status) => {
+        setSatelliteStatus(status);
+        if (status.ready) setBaseLayer('satellite');
+      })
+      .finally(() => setSatelliteDownloading(false));
+  }, []);
+
+  const handleDownloadLidar = useCallback(() => {
+    setLidarDownloading(true);
+    downloadLidarTiles()
+      .then((status) => {
+        setLidarStatus(status);
+        if (status.ready) setBaseLayer('lidar');
+      })
+      .finally(() => setLidarDownloading(false));
+  }, []);
 
   // Appends the live GPS position while recording (spec §12), skipping
   // points too close to the last one so a stationary rider doesn't flood
@@ -269,7 +327,7 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     <View style={styles.container}>
       <MapLibreMap
         style={styles.map}
-        mapStyle={mapStyle}
+        mapStyle={activeMapStyle}
         onPress={clearTransientOverlays}
         onLongPress={handleLongPress}
       >
@@ -316,6 +374,18 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         parcelsVisible={parcelsVisible}
         onToggleParcels={setParcelsVisible}
         parcelsIsSample={parcelsIsSample}
+      />
+      <BaseLayerSelector
+        active={baseLayer}
+        onSelect={setBaseLayer}
+        satelliteReady={satelliteStatus.ready}
+        satelliteDownloading={satelliteDownloading}
+        onDownloadSatellite={handleDownloadSatellite}
+        lidarReady={lidarStatus.ready}
+        lidarDownloading={lidarDownloading}
+        onDownloadLidar={handleDownloadLidar}
+        labelsEnabled={labelsEnabled}
+        onToggleLabels={setLabelsEnabled}
       />
       <BreadcrumbButton
         recording={breadcrumbRecording}
