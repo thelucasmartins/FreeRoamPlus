@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "FreeRoam+",
+    "slug": "freeroam-plus",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lucasmartins.freeroamplus"
+    },
+    "android": {
+      "package": "com.lucasmartins.freeroamplus",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@maplibre/maplibre-react-native",
+      "expo-asset",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FreeRoam+ uses your position to show where you are on the offline map. Location comes from the phone's GPS chip and never leaves the device."
+        }
+      ]
+    ]
+  }
+}
