@@ -55,4 +55,10 @@ renders unlabeled, which is fine for verifying step 1 of the build order.
 - Satellite + LiDAR hillshade base layers: raster MBTiles, same delivery path.
 - Structures / roads / parcels overlays: GeoJSON exports from the existing
   nDSM pipeline and Sonoma County GIS (spec §9).
+- Road extraction bucketing: LiDAR-detected paths lacking OSM classification
+  get split by cleared width into hiking trail / ATV trail / drivable road
+  before the green/yellow/red assignment (spec §15); only the drivable band
+  feeds the routing graph below.
+- Offline search index: OSM place/address/POI names for Sonoma County, built
+  at pipeline time and bundled on-device (spec §16).
 - Routing graph: Valhalla or GraphHopper extract (spec §7).

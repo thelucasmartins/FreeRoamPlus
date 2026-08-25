@@ -8,8 +8,10 @@ Offline off-road navigation and terrain-awareness app for adventure riding in So
 - **Multiple map layers** — street, satellite, LiDAR (hillshade/nDSM), and hybrid views, all pre-rendered and stored locally.
 - **Structure detection** — flags man-made buildings from LiDAR nDSM data, distinguishing known/documented structures from undocumented ones not present in public footprint databases.
 - **Road classification** — color-coded by type: green (public/government-maintained), yellow (national forest/protected land), red (private or unclassified/undocumented).
+- **Trail width classification** — LiDAR-detected paths with no OSM classification are bucketed by cleared width: under 1m as hiking trail (purple), 1–3m as ATV trail (pink), 3m+ as drivable road (green/yellow/red per the rule above). Only drivable-width paths join the routable road network.
 - **Parcel boundaries** — toggleable parcel layer showing lot size, zoning, and APN (no owner names). Resource-extraction parcels (timber, mining, milling) are visually flagged separately based on zoning data.
 - **Elevation/grade indicator** — shows incline and steepness along a route or road segment.
+- **Destination selection** — tap anywhere to pin and route to that exact coordinate, or search by name/address/road using an offline index built from OSM data (public/named locations only, consistent with the labeling rule). Pins with no nearby routable path still get a route to the nearest reachable point, flagged as off-network beyond that.
 - **Waypoints** — drop pins with notes anywhere on the map, saved locally.
 - **Breadcrumb trail** — optional, manually-toggled trail of the current ride for backtracking.
 - **Live GPS tracking** — uses the phone's onboard GPS chip directly, no signal required.

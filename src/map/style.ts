@@ -5,8 +5,9 @@
  * see docs/DATA.md), read from a local MBTiles database via mbtiles://.
  *
  * This is the neutral "street map" base layer (spec §3.1). The green/yellow/
- * red road-classification coloring from spec §5 is a separate overlay coming
- * in build-order step 3 — it does not belong in this base style.
+ * red road-classification coloring from spec §5, and the purple/pink hiking-
+ * and ATV-trail width bands from spec §15, are a separate overlay coming in
+ * build-order step 3 — they do not belong in this base style.
  */
 
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';

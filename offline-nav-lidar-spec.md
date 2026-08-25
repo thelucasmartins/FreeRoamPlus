@@ -99,3 +99,22 @@ A fully offline navigation and terrain-awareness app for off-road/adventure ridi
 3. Add road color-coding logic.
 4. Add GPS live-tracking dot.
 5. Package as installable app shell.
+
+
+## 15. Path Width Classification (Roads vs. Trails)
+
+LiDAR road/path detection is based on cleared-width pattern matching, which risks misclassifying narrow trails as roads without an explicit threshold. Width bands (applies specifically to LiDAR-detected paths lacking OSM classification):
+
+| Width | Classification | Color |
+|---|---|---|
+| Under 1 meter (roughly 1-2 feet) | Hiking trail | Purple |
+| 1-3 meters (ATV / side-by-side width) | ATV trail | Pink |
+| 3 meters / 10 feet or more | Drivable road | Follows existing Green/Yellow/Red rule (Section 5) |
+
+Purple and pink paths are not part of the vehicle-routing road network; they render as distinct trail overlays. Only paths meeting the drivable-road width threshold are eligible for turn-by-turn routing under Section 7 (though routing can still target a tapped point near a trail, per Section 7 fallback behavior).
+
+## 16. Destination Selection & Search
+
+- **Tap-to-pin**: tap anywhere on the map to drop a pin and route to that exact coordinate, regardless of whether it falls on a known road, an undocumented LiDAR-detected road, or open terrain with no path nearby.
+- **Offline search bar**: search by place name, address, or road name. Powered by a search index built at data-pipeline time from OpenStreetMap place/address/POI data for Sonoma County, bundled locally on-device (no live server lookups). Only returns publicly known/named locations (consistent with the labeling rule in Section 6) — private/unclassified roads and structures are not searchable by name, only reachable via tap-to-pin.
+- **Routing fallback for unreachable pins**: if a dropped pin has no road, drivable path, or trail within the routable network, the app routes to the nearest reachable point on the network and indicates the remaining distance/direction is off-network (on foot/by eye), rather than failing to produce a route.
