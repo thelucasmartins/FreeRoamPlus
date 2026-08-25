@@ -20,15 +20,18 @@ const ATV_TRAIL_MAX_WIDTH_M = 3;
  * classification by definition — falls under the spec §5 red bucket
  * ("unclassified roads with no public data").
  *
- * For OSM-tagged roads, this applies a first-pass rule for the spec §5
- * green/yellow/red split: private or unresolvable access is red; public
- * access inside national forest/protected land is yellow (protected-land
- * status takes priority over a private tag, since restricted-access rules
- * there are the more operationally relevant fact for a rider); otherwise
- * green. Spec §10 flags that OSM tagging doesn't cleanly map to
- * public/government/protected-land — this rule is a reasonable default to
- * unblock rendering, not a final answer; refine it once real OSM tag
- * coverage for Sonoma County has been reviewed.
+ * For OSM-tagged roads, this applies the confirmed spec §5 green/yellow/red
+ * split, in priority order: private (or unresolvable access) is red; failing
+ * that, national forest/protected land is yellow; otherwise green. Private
+ * beats protected-land beats public — restricted-access rules on private
+ * land are the more operationally relevant fact for a rider than the
+ * protected-land designation. This priority order is settled.
+ *
+ * What's still open (spec §10) is upstream of this function: which raw OSM
+ * tags actually populate `access`/`protectedLand` for a given Sonoma County
+ * road. That mapping is a pipeline concern (see docs/DATA.md) — once it's
+ * resolved, this function's inputs get more accurate without this function
+ * itself needing to change.
  */
 export function classifyRoad(properties: RoadProperties): RoadCategory {
   if (properties.source === 'lidar') {

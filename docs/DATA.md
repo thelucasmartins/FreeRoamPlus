@@ -108,14 +108,17 @@ pipeline export. Two feature shapes, one per property set:
   hiking trail (<1m, purple), ATV trail (1–3m, pink), or drivable-but-
   unclassified (3m+, red) per spec §15.
 
-**Spec §10 open question**: OSM tagging doesn't cleanly map to public vs.
-government vs. protected land. `roadClassification.ts` currently uses a
-first-pass rule (private/unknown access → red; protected land → yellow
-regardless of access, since restricted-access rules there matter more to a
-rider than the public/private distinction; otherwise green) to unblock
-rendering. Revisit this once real OSM tag coverage for Sonoma County roads
-has been reviewed — the fix belongs in that one function, not the app code
-that consumes its output.
+**Priority rule (confirmed)**: `roadClassification.ts` resolves the spec §5
+green/yellow/red split as private/unknown access → red; else protected land
+→ yellow; else green. Private beats protected-land beats public. This
+ordering is settled, not a placeholder.
+
+What's still open per spec §10 is upstream of that rule: which raw OSM tags
+should populate the `access`/`protectedLand` fields for a given Sonoma
+County road (e.g. which `boundary=protected_area`/`operator=USFS`/access
+tags qualify). That's a pipeline task — refine the OSM cross-reference logic
+in step 2 below once real tag coverage for the region has been reviewed;
+`roadClassification.ts` itself doesn't need to change for that.
 
 To produce the real file:
 

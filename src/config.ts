@@ -12,6 +12,9 @@ export const DEFAULT_ZOOM = 10;
 export const MIN_ZOOM = 7;
 export const MAX_ZOOM = 16;
 
+/** Zoom level the camera snaps to when the user engages GPS follow mode. */
+export const FOLLOW_ZOOM = 15;
+
 /** Approximate Sonoma County bounding box (WGS84). */
 export const REGION_BOUNDS = {
   sw: [-123.65, 38.05] as [number, number],

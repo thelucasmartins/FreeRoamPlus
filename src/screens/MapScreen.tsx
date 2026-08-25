@@ -1,14 +1,16 @@
 import {
   Camera,
   Map as MapLibreMap,
-  type StyleSpecification,
+  useCurrentPosition,
   UserLocation,
+  type StyleSpecification,
+  type TrackUserLocationChangeEvent,
 } from '@maplibre/maplibre-react-native';
-import * as Location from 'expo-location';
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, Text, View, type NativeSyntheticEvent } from 'react-native';
 
-import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, SONOMA_CENTER } from '../config';
+import { DEFAULT_ZOOM, FOLLOW_ZOOM, MAX_ZOOM, MIN_ZOOM, SONOMA_CENTER } from '../config';
+import { useUserLocation } from '../location/useUserLocation';
 import { RoadsOverlay } from '../map/RoadsOverlay';
 import { StructuresOverlay } from '../map/StructuresOverlay';
 import { loadRoads } from '../overlays/roadsStore';
@@ -16,6 +18,7 @@ import type { ClassifiedRoadFeatureCollection } from '../overlays/roadTypes';
 import { loadStructures } from '../overlays/structuresStore';
 import type { StructureFeatureCollection } from '../overlays/types';
 import { LayersPanel } from './LayersPanel';
+import { LocateButton } from './LocateButton';
 
 interface MapScreenProps {
   /** Style JSON (offline) or style URL string (dev fallback). */
@@ -27,20 +30,16 @@ interface MapScreenProps {
 }
 
 export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
-  const [locationGranted, setLocationGranted] = useState(false);
+  const { status: locationStatus, servicesEnabled, requestOrOpenSettings } = useUserLocation();
+  const currentPosition = useCurrentPosition({ enabled: locationStatus === 'granted' });
+  const [following, setFollowing] = useState(false);
+
   const [structures, setStructures] = useState<StructureFeatureCollection | null>(null);
   const [structuresIsSample, setStructuresIsSample] = useState(false);
   const [structuresVisible, setStructuresVisible] = useState(true);
   const [roads, setRoads] = useState<ClassifiedRoadFeatureCollection | null>(null);
   const [roadsIsSample, setRoadsIsSample] = useState(false);
   const [roadsVisible, setRoadsVisible] = useState(true);
-
-  useEffect(() => {
-    // GPS works fully offline (spec §8); ask once so the position dot can show.
-    Location.requestForegroundPermissionsAsync()
-      .then(({ status }) => setLocationGranted(status === 'granted'))
-      .catch(() => setLocationGranted(false));
-  }, []);
 
   useEffect(() => {
     loadStructures().then(({ data, isSample }) => {
@@ -53,6 +52,25 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
     });
   }, []);
 
+  // Dragging/zooming the map by hand disengages follow mode natively, which
+  // fires this — keep our button state in sync rather than fighting the user.
+  const handleTrackUserLocationChange = useCallback(
+    (event: NativeSyntheticEvent<TrackUserLocationChangeEvent>) => {
+      setFollowing(event.nativeEvent.trackUserLocation != null);
+    },
+    [],
+  );
+
+  const handleLocatePress = useCallback(() => {
+    if (locationStatus !== 'granted') {
+      requestOrOpenSettings();
+      return;
+    }
+    setFollowing((prev) => !prev);
+  }, [locationStatus, requestOrOpenSettings]);
+
+  const waitingForFix = locationStatus === 'granted' && !currentPosition;
+
   return (
     <View style={styles.container}>
       <MapLibreMap style={styles.map} mapStyle={mapStyle}>
@@ -63,12 +81,15 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
           }}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
+          trackUserLocation={following ? 'heading' : undefined}
+          zoom={following ? FOLLOW_ZOOM : undefined}
+          onTrackUserLocationChange={handleTrackUserLocationChange}
         />
         {roadsVisible && roads && <RoadsOverlay data={roads} />}
         {structuresVisible && structures && (
           <StructuresOverlay data={structures} glyphsUrl={glyphsUrl} />
         )}
-        {locationGranted && <UserLocation accuracy heading />}
+        {locationStatus === 'granted' && <UserLocation accuracy heading />}
       </MapLibreMap>
       <LayersPanel
         structuresVisible={structuresVisible}
@@ -78,6 +99,17 @@ export function MapScreen({ mapStyle, offline, glyphsUrl }: MapScreenProps) {
         onToggleRoads={setRoadsVisible}
         roadsIsSample={roadsIsSample}
       />
+      <LocateButton
+        status={locationStatus}
+        servicesEnabled={servicesEnabled}
+        following={following}
+        onPress={handleLocatePress}
+      />
+      {waitingForFix && (
+        <View style={styles.gpsBadge}>
+          <Text style={styles.gpsBadgeText}>Acquiring GPS…</Text>
+        </View>
+      )}
       {!offline && (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
@@ -106,6 +138,20 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   bannerText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  gpsBadge: {
+    position: 'absolute',
+    bottom: 28,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(61, 58, 52, 0.85)',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  gpsBadgeText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
