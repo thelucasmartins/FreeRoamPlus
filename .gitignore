@@ -44,3 +44,13 @@ yarn-error.*
 # offline tile data (built with Planetiler, too large for git)
 /data
 *.mbtiles
+
+# lidar-pipeline/ (Python)
+__pycache__/
+*.pyc
+
+# Claude Code session-local state (the checked-in files in .claude/ are
+# settings.json and hooks/ — everything else is machine-local)
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/worktrees/
