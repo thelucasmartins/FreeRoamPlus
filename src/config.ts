@@ -36,7 +36,7 @@ export const MBTILES_FILENAME = 'sonoma.mbtiles';
  *
  * then set this to http://<your-desktop-LAN-IP>:8080/sonoma.mbtiles.
  */
-export const TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/sonoma.mbtiles';
+export const TILE_DOWNLOAD_URL = 'http://10.0.0.150:8080/sonoma.mbtiles';
 
 /**
  * Online style used only as a development fallback when no offline tiles are
@@ -52,7 +52,7 @@ export const DEV_FALLBACK_STYLE_URL = 'https://demotiles.maplibre.org/style.json
 export const SATELLITE_MBTILES_FILENAME = 'satellite.mbtiles';
 
 /** One-time download source for the satellite tile database — see TILE_DOWNLOAD_URL for the dev-serving pattern. */
-export const SATELLITE_TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/satellite.mbtiles';
+export const SATELLITE_TILE_DOWNLOAD_URL = 'http://10.0.0.150:8080/satellite.mbtiles';
 
 /**
  * Filename of the LiDAR hillshade base layer (spec §3.3): a raster-dem
@@ -64,7 +64,7 @@ export const SATELLITE_TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/satellite.
 export const LIDAR_MBTILES_FILENAME = 'lidar-hillshade.mbtiles';
 
 /** One-time download source for the LiDAR hillshade tile database. */
-export const LIDAR_TILE_DOWNLOAD_URL = 'http://192.168.1.100:8080/lidar-hillshade.mbtiles';
+export const LIDAR_TILE_DOWNLOAD_URL = 'http://10.0.0.150:8080/lidar-hillshade.mbtiles';
 
 /** Directory (under the app's document dir) where overlay GeoJSON lives. */
 export const OVERLAYS_DIR_NAME = 'overlays';
