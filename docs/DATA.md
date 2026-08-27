@@ -197,6 +197,21 @@ and honest limitations (it's a heuristic, not a verified trail classifier —
 expect false positives on ditches/field edges and false negatives under
 heavy canopy; QA the output before trusting it).
 
+**Status after real-terrain testing (2026-08-26)**: the script runs clean
+end to end and its cross-referencing correctly recognizes real mapped
+roads, but no genuine unmapped trail has been detected yet in any tested
+area (downtown Santa Rosa, Trione-Annadel, Sonoma Mountain foothills). The
+**canopy-cover limitation is still open**: LiDAR can't resolve ground-level
+clearance under dense oak/fir canopy, which is exactly where Sonoma's real
+singletrack mostly lives — so the detector only ever sees trails where
+they cross open ground, and everything it flagged in open ground so far
+was the edge of a wider clearing (now filtered — see the pipeline
+README's "cap-pinned" note). The likely real fix is a land-cover /
+tree-canopy cross-reference against a county land-cover layer, **not yet
+implemented**. Until then, expect `roads.geojson` to carry few or no
+`source: "lidar"` features, and treat that as honest output rather than a
+pipeline failure.
+
 To produce the real file:
 
 1. Run `pipeline/fetchRoads.ts` for the OSM-sourced portion (real, done), or

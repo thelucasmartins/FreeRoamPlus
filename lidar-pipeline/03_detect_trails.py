@@ -60,7 +60,10 @@ Algorithm, per DSM/DTM tile pair:
      that transition by the time skan sees it — skan just finds whatever
      ribbon-shaped fragments are left, the same as it would for any other
      gap in the skeleton. Keep fragments long enough and narrow enough to
-     plausibly be a real trail.
+     plausibly be a real trail — including rejecting any fragment whose
+     *median* width is pinned at the width cap (CAP_PINNED_WIDTH_M), the
+     confirmed signature of a wider cleared area's edge rather than a
+     trail; see that constant's comment for the real-data evidence.
   7. Drop any branch that mostly overlaps an existing OSM road/track
      (../pipeline/fetchRoads.ts output) — already known, don't duplicate.
   8. Append survivors to roads.geojson as {source: "lidar", widthMeters}.
@@ -194,6 +197,20 @@ from common import (
 LOW_VEG_THRESHOLD_M = 0.4
 CLEARANCE_NOISE_TOLERANCE_M = 0.3  # allow slightly-negative nDSM noise without excluding real ground
 MAX_TRAIL_WIDTH_M = 4.0  # generous upper bound past the 3m ATV band, to allow some double-track slop
+# Reject any segment whose *median* width is pinned at the cap. Evidence
+# from both real test areas (downtown Santa Rosa and the Sonoma Mountain
+# foothills / Rohnert Park flats): every confirmed false positive — 4 of 5
+# downtown, and all 95 added in the foothills run — reported median width
+# exactly 4.0m, the cap itself. That's the signature of the *edge of a
+# wider cleared area* (parking, farmyard, field margin): the only skeleton
+# pixels that survive the width filter there are the ones grazing the cap,
+# so the surviving fragment's median sits at the cap by construction. A
+# genuine trail can't produce it — a real sub-3m trail's median lands in
+# its own band well below the cap, and even a true 4m double-track at the
+# cap is indistinguishable from this failure mode at this resolution, so
+# it's excluded as the price of killing the dominant false-positive class
+# (the purple/pink <3m bands this script exists to find are unaffected).
+CAP_PINNED_WIDTH_M = 3.9
 MIN_TRAIL_LENGTH_M = 15.0
 MIN_CLEARANCE_ELONGATION = 4.0  # local major/minor axis ratio required — see module docstring
 # The local elongation window scales with each pixel's own local width
@@ -333,7 +350,9 @@ def detect_in_tile(dsm_path, dtm_path, resolution: float):
         coords = skel_obj.path_coordinates(i)  # (row, col) pixel coordinates, in order
         widths = [2 * dist_m[int(round(r)), int(round(c))] for r, c in coords]
         median_width_m = float(np.median(widths))
-        if median_width_m <= 0 or median_width_m > MAX_TRAIL_WIDTH_M:
+        if median_width_m <= 0 or median_width_m >= CAP_PINNED_WIDTH_M:
+            # >= CAP_PINNED_WIDTH_M: the cap-pinned-median false-positive
+            # signature — see that constant's comment for the evidence.
             continue
 
         world_coords = [transform * (c, r) for r, c in coords]

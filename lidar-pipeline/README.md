@@ -278,6 +278,32 @@ both:
   environment; the run found 2 real candidates (one matching White Oak
   Drive, one matching an unnamed mapped public way inside the park), both
   correctly dropped as already OSM-documented.
+- **Trails — the cap-pinned-median filter, and what it revealed**: every
+  candidate segment the detector produced across both real test areas
+  (downtown Santa Rosa and a 90-tile Sonoma Mountain foothills /
+  Rohnert Park run — 337 candidates in the latter) had a *median* width
+  pinned at the 4m width cap: the signature of a wider cleared area's
+  edge (parking, farmyard, field margin, road shoulder), not a trail.
+  `CAP_PINNED_WIDTH_M` in `03_detect_trails.py` now rejects that
+  signature outright (see its comment for the evidence), which
+  eliminated 100% of the confirmed false positives — and, honestly,
+  100% of all candidates so far: **no genuine sub-3.9m-median trail
+  candidate has yet been observed in any area this pipeline has been
+  run on.** The purple/pink detection capability is implemented and
+  runs clean end to end, but is so far unproven against a confirmed
+  real unmapped trail — see the canopy limitation below for the likely
+  reason, and treat any future "0 candidates" result on wildland
+  terrain as expected behavior, not a bug.
+- **Trails — canopy cover, still open**: LiDAR can't resolve ground-level
+  clearance under dense oak/fir canopy, and Sonoma's actual singletrack
+  mostly lives exactly there — the probable reason the areas tested so
+  far yielded no real unmapped-trail detections (Annadel's known trails
+  produced nDSM clearance signal only where they cross open meadow).
+  The likely real fix is a land-cover / tree-canopy cross-reference —
+  restrict detection thresholds (or at least interpretation) by whether
+  a candidate sits under mapped canopy, using a real county land-cover
+  layer if one can be found (the same fix flagged for structures above).
+  **Not yet implemented.**
 - **Trails**: false positives from drainage ditches, fence lines, and
   vineyard/agricultural access rows narrow enough to pass both the width
   and elongation filters (see `03_detect_trails.py`'s docstring for what
