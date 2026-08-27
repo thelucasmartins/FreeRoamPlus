@@ -4,13 +4,21 @@ The app renders a local vector-tile database (`sonoma.mbtiles`, OpenMapTiles
 schema) with MapLibre. This is build-time work done on a desktop (spec §9),
 then transferred to the phone once.
 
-**Real pipeline scripts exist for most of this** — see
-[pipeline/](../pipeline/) and its [README](../pipeline/README.md) for what's
-been fetched from real public sources (OSM via Overpass, Sonoma County's own
-ArcGIS parcels service, USGS elevation data) versus what still needs LiDAR
-point-cloud processing, a native tiling toolchain, or both, that this
-environment doesn't have. Each section below is annotated with which case it
-is.
+**Real pipeline scripts exist for most of this**, split across two
+toolchains for two different environments:
+
+- [pipeline/](../pipeline/) (TypeScript/Node) — fetches from real public
+  sources (OSM via Overpass, Sonoma County's own ArcGIS parcels service,
+  USGS elevation data). Runs anywhere Node runs, including the sandboxed
+  environment this app was otherwise built in.
+- [lidar-pipeline/](../lidar-pipeline/) (Python/PDAL) — real LiDAR
+  point-cloud processing for undocumented structures and trail-width
+  detection. Needs PDAL/GDAL and tens of GB of scratch disk, so it's meant
+  to run on your own machine — see its README for install steps.
+
+Each section below is annotated with which one applies (or, for the base
+map/satellite/hillshade tiles, which native toolchain neither of these
+scripts covers is still needed).
 
 ## 1. Build `sonoma.mbtiles` with Planetiler
 
@@ -76,20 +84,46 @@ Structures toggle shows bundled placeholder data (see
 the layer is exercisable before the real pipeline runs — the in-app legend
 flags this with a "Sample data" note.
 
-**Real data, partially**: [pipeline/fetchStructures.ts](../pipeline/fetchStructures.ts)
-fetches real OSM building footprints for the whole county via Overpass —
-every `documented: true` structure it produces is real. Confirmed run:
-323,040 documented structures (82,474 named), 106.8MB, tiled into a 4×4
-grid of sub-queries since a single whole-county query 504-timed-out (see
-the script's header comment). It cannot produce any `documented: false`
-(undocumented) structures: that requires LiDAR nDSM elevation-signal
-analysis and the existing structure-detection tool spec §1 says this app
-reuses, neither of which this environment has access to. Run it, then copy
-`data/overlays/structures.geojson` to the device the same way as below —
-or run the real pipeline yourself:
+**Real data, partially** from [pipeline/fetchStructures.ts](../pipeline/fetchStructures.ts):
+real OSM building footprints for the whole county via Overpass — every
+`documented: true` structure it produces is real. Confirmed run: 323,040
+documented structures (82,474 named), 106.8MB, tiled into a 4×4 grid of
+sub-queries since a single whole-county query 504-timed-out (see the
+script's header comment).
 
-1. Run the existing nDSM structure-detection pipeline over the Sonoma County
-   LiDAR tile set — this is the piece that needs Lucas's own tool.
+**`documented: false` (undocumented) structures**: this needs real LiDAR
+nDSM elevation-signal analysis, which needs PDAL/GDAL and tens of GB of
+scratch disk this sandboxed environment doesn't have —
+[lidar-pipeline/02_detect_structures.py](../lidar-pipeline/02_detect_structures.py)
+does this for real on your own machine instead: it detects tall, compact,
+building-shaped blobs in the LiDAR height-above-ground signal, drops any
+that overlap what `fetchStructures.ts` already found (avoiding duplicates),
+and appends the rest as `documented: false`. See
+[lidar-pipeline/README.md](../lidar-pipeline/README.md) for what to install
+and honest limitations (it's a heuristic, not a verified detector — expect
+to QA the output before trusting it).
+
+**Confirmed run, real terrain**: `02_detect_structures.py` has been run for
+real against actual OpenTopography LiDAR tiles, cross-referenced against
+this same `fetchStructures.ts` output. Downtown Santa Rosa (flat, mixed
+built-up) and Trione-Annadel State Park (real hill/forest terrain) both
+tested directly. The park result is the important honest finding: 2,258
+raw candidates over 14 tiles (~5.6 km²), 1,192 of them not overlapping any
+OSM footprint — almost certainly overwhelmingly dense tree canopy reading
+as building-shaped, not real undocumented structures, exactly the
+vegetation false-positive failure mode the script's own docstring already
+warns about, just now measured at real scale. **Don't trust `documented:
+false` output in forested/park terrain without a QGIS spot-check first**
+— see [lidar-pipeline/README.md](../lidar-pipeline/README.md)'s "Known
+limitations" for the full picture, including a real LiDAR data-quality bug
+(the "Z-unit" bug) discovered during this same testing.
+
+Run `fetchStructures.ts`, then copy `data/overlays/structures.geojson` to
+the device the same way as below — or run the real pipeline yourself:
+
+1. Run `lidar-pipeline/02_detect_structures.py` over the Sonoma County
+   LiDAR tile set (real, done for two test areas — see above; a
+   county-wide run just needs time, not new code).
 2. Cross-reference detections against OSM building footprints + Microsoft
    Building Footprints to set `documented`.
 3. Export as GeoJSON (WGS84) named `structures.geojson`.
@@ -145,9 +179,23 @@ against real Overpass-fetched protected-area boundaries — not a stand-in.
 Run against the app's own `roadClassification.ts`, this produced 63,122
 green / 245 yellow / 55,704 red real roads, including real protected-land
 matches like Armstrong Woods Road (Armstrong Redwoods State Natural
-Reserve). It cannot produce any `lidar`-sourced features (purple/pink
-trail-band detection): that needs point-cloud processing this environment
-doesn't have.
+Reserve).
+
+**`lidar`-sourced features (purple/pink trail-band detection)**: this needs
+real point-cloud processing (PDAL/GDAL, tens of GB of scratch disk) this
+sandboxed environment doesn't have —
+[lidar-pipeline/03_detect_trails.py](../lidar-pipeline/03_detect_trails.py)
+does this for real on your own machine instead: it finds linear cleared
+corridors in the LiDAR height-above-ground signal narrow and consistent
+enough to be a trail (not a field or lot), measures their width directly
+from the point cloud, drops anything that already coincides with an OSM
+road/track from `fetchRoads.ts` (avoiding duplicates), and appends the rest
+as `{source: "lidar", widthMeters}` — `roadClassification.ts` turns that
+into the purple/pink bands with no changes needed. See
+[lidar-pipeline/README.md](../lidar-pipeline/README.md) for what to install
+and honest limitations (it's a heuristic, not a verified trail classifier —
+expect false positives on ditches/field edges and false negatives under
+heavy canopy; QA the output before trusting it).
 
 To produce the real file:
 
@@ -155,13 +203,12 @@ To produce the real file:
    reproduce it yourself against a full `.osm.pbf` extract with `osmium`/
    `ogr2ogr` if you want offline-only tooling instead of the live Overpass
    API this script uses.
-2. Run LiDAR road extraction (flat, linear cleared paths) over the Sonoma
-   County tile set, recording cleared width per segment (spec §9 step 3) —
-   this is the piece that's still a real gap; merge its output in as
-   `lidar`-sourced features alongside step 1's `osm`-sourced ones.
-3. Export as GeoJSON (WGS84) named `roads.geojson`.
-4. Copy it to the device at `overlays/roads.geojson` (same manual/Wi-Fi
-   transfer approach as the tile database above).
+2. Run `lidar-pipeline/03_detect_trails.py` for the LiDAR-sourced portion
+   (real, on your own machine — see above) — it reads and appends to the
+   same file step 1 produced, rather than needing a separate merge step.
+3. Copy `data/overlays/roads.geojson` to the device at
+   `overlays/roads.geojson` (same manual/Wi-Fi transfer approach as the
+   tile database above).
 
 Until this file exists on-device, the Roads & Trails toggle shows bundled
 placeholder data covering all five categories (see

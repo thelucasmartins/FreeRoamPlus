@@ -41,9 +41,9 @@ version, cross-referenced against spec §9's pipeline steps:
 
 | Spec §9 step | Real data produced? | Source |
 |---|---|---|
-| 1. Pull LiDAR (nDSM) + OSM building footprints | OSM half only | Overpass (`fetchStructures.ts`) |
-| 2. Structure detection → documented vs. undocumented | Documented half only | same — undocumented needs LiDAR nDSM + the existing structure-detection tool (spec §1), neither available here |
-| 3. Road extraction from LiDAR + OSM cross-reference | OSM half only, real protected-land spatial join | Overpass (`fetchRoads.ts`) — LiDAR-detected trail bands need point-cloud processing this environment doesn't have |
+| 1. Pull LiDAR (nDSM) + OSM building footprints | Yes — OSM half here, LiDAR half in `../lidar-pipeline/` | Overpass (`fetchStructures.ts`) + `../lidar-pipeline/01_generate_dsm_dtm.py` |
+| 2. Structure detection → documented vs. undocumented | Yes — documented half here, undocumented half in `../lidar-pipeline/` | same + `../lidar-pipeline/02_detect_structures.py` (real nDSM detection, run on your own machine — needs PDAL/GDAL this environment doesn't have) |
+| 3. Road extraction from LiDAR + OSM cross-reference | Yes — OSM half + real protected-land spatial join here, LiDAR trail-width detection in `../lidar-pipeline/` | Overpass (`fetchRoads.ts`) + `../lidar-pipeline/03_detect_trails.py` (same — your own machine, PDAL/GDAL) |
 | 4. Parcel boundary data, verify it renders | Yes, real, whole county | Sonoma County ArcGIS (`fetchParcels.ts`) — see its header for a real field-check finding (no standalone zoning layer exists publicly; substituted Assessor Use Code) |
 | 5. Export all layers as GeoJSON | Yes, for everything above | — |
 | 6. Generate MBTiles for street + satellite | **Not done** | needs Java (Planetiler) / GDAL (`gdal2tiles`), neither installed, and this session's disk budget (4.3GB free) doesn't safely fit a regional OSM PBF + tile-generation temp space |

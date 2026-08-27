@@ -1,0 +1,30 @@
+# Conda environment for the local LiDAR pipeline — see README.md, both for
+# why conda-forge (not pip) is the supported path here, and for why the
+# create command below uses -p to put this environment (and Miniforge
+# itself, and conda's package cache) on an external drive rather than C:.
+#
+#   conda env create -f environment.yml -p D:\FreeRoam-lidar-env
+#   conda activate D:\FreeRoam-lidar-env
+#
+# `name:` below is unused when -p is given (conda uses -p's path either
+# way) — kept only so `conda env list` shows something readable.
+name: freeroam-lidar
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pdal
+  - python-pdal
+  - gdal
+  - rasterio
+  - geopandas
+  - shapely
+  - scikit-image
+  - scipy
+  - numpy
+  - pyproj
+  - tqdm
+  - skan
+  # direct import in 00_fetch_tile_index.py — don't rely on it arriving
+  # transitively through some other package's dependency tree
+  - requests

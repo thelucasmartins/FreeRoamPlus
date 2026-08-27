@@ -43,15 +43,19 @@ A real data pipeline ([pipeline/](pipeline/), build-order step 9) now
 produces real Sonoma County structures, roads, parcels, elevation, and
 search-index data from live OSM/USGS/county sources — see
 [pipeline/README.md](pipeline/README.md) for confirmed output sizes and
-counts, and [docs/DATA.md](docs/DATA.md) for how each overlay consumes it
-plus what's still a genuine gap in this environment: undocumented
-(LiDAR-flagged) structures and LiDAR-detected trail bands (need point-cloud
-processing this environment doesn't have), and the street/satellite/LiDAR
-hillshade MBTiles tile packages (need Java/GDAL and more disk than this
-environment's budget allows). Until real data is copied onto a device,
-every overlay still falls back to bundled placeholder data so the app is
-exercisable without any of that. `docs/DATA.md` also covers the vector-tile
-approach needed for the parcels layer at full county scale and why routing
+counts. A second, local-only pipeline ([lidar-pipeline/](lidar-pipeline/))
+does real LiDAR point-cloud processing for the two things OSM data alone
+can't cover — undocumented structures and LiDAR-measured trail width — from
+a real, verified Sonoma County LiDAR survey; it needs PDAL/GDAL and tens of
+GB of scratch disk, so it's meant to run on your own machine rather than
+this sandboxed one (see its README for install steps and honest heuristic
+limitations). The street/satellite/LiDAR hillshade MBTiles tile packages
+remain a genuine gap with no tooling yet (need Java/GDAL and more disk than
+this environment's budget allows). Until real data is copied onto a
+device, every overlay still falls back to bundled placeholder data so the
+app is exercisable without any of that. `docs/DATA.md` also covers the
+vector-tile approach needed for the parcels layer at full county scale and
+why routing
 here is a custom on-device graph router rather than a compiled
 Valhalla/GraphHopper binary. Packaging as an installable app shell (step 5)
 is the only build-order item left.
