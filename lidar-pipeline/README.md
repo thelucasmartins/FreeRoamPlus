@@ -255,6 +255,52 @@ both:
   cross-referencing against known tree-canopy/land-cover data, if a real
   county land-cover layer can be found) before trusting a county-wide run
   in the hillier, more forested two-thirds of Sonoma County.
+
+### Trail detection: a CLOSED research question — read this before reopening it
+
+**Detecting unmapped trails from this LiDAR dataset does not work, and is
+not an open TODO.** Three approaches were designed, implemented, and
+measured against real mapped trails in real Sonoma terrain over
+2026-08-26/27. All three failed, each for a different and now
+well-understood reason. The per-approach bullets below this summary carry
+the full numbers; this section exists so nobody re-derives them from
+scratch.
+
+| # | Approach | Core finding | Why it failed |
+|---|---|---|---|
+| 1 | **nDSM clearance** (shipped, default) | Finds real *mapped* roads reliably; 233 of 337 candidates in one run correctly matched OSM ways | Every unmatched candidate was the *edge of a wider clearing* — median width pinned at the 4m cap. Now rejected by `CAP_PINNED_WIDTH_M`, which removed 100% of false positives and 100% of all candidates |
+| 2 | **Canopy-gated clearance** (`--canopy-mode`, off) | Median on-trail nDSM is 11–14m — the DSM over a canopy trail *is the canopy top* | The corridor is ~80% absent from the signal, so no threshold recovers it. Worse, signal and gate **anti-correlate**: trails with residual signal sit in sub-60% TCC cells where the gate never fires; fully-gated closed canopy has no signal at all |
+| 3 | **DTM bench-cut** (probe only, not implemented) | **The signal is real** — flatness ratio 0.15 on-trail vs 0.58 on paired controls (n=693), and it *survives closed canopy* | A blind detector can't exploit it. Searching transect orientations (unavoidable without ground truth) inflates false positives ~3× at K=12 and collapses the continuity filter to 1.4× — ~17k false county-wide candidates |
+
+**The unifying lesson**, and the reason a fourth attempt along these lines
+is not advisable: a per-pixel elevation statistic plus a shape/length
+filter is the wrong tool for this. Approaches 1 and 2 failed on *missing
+signal* (canopy occludes the surface the statistic reads). Approach 3
+proved the signal exists in the bare-earth data, and still failed on
+*missing orientation* — the coherence that made it look promising was
+ground-truth trail direction leaking into the measurement. Anything that
+works from here needs orientation coherence as an explicit optimization
+term (geodesic/minimal-path tracking over position+direction, or
+Hough-style accumulation), which is a categorically different piece of
+engineering from this pipeline's threshold-and-skeletonize design, with
+no evidence it clears the same false-positive arithmetic.
+
+**What this means practically**: `03_detect_trails.py` stays in the
+pipeline and stays useful — it runs clean, cross-references correctly
+against OSM, and its cap-pinned filter keeps it from emitting garbage. It
+simply produces few or no `source: "lidar"` features on real terrain, and
+**that is the correct, honest output, not a bug to chase.** The app's
+purple/pink width bands (`src/overlays/roadClassification.ts`) are fully
+implemented and will render correctly the day a detector produces real
+features for them. Spec §15's trail-width capability is therefore
+*implemented but unfed* — the honest status, matching how every other gap
+in this project is recorded.
+
+If new data changes the premise — a higher-resolution or leaf-off LiDAR
+flight, or a published trail dataset to cross-reference — that is a reason
+to revisit. Another pass over *this* 2013 dataset with a different
+threshold is not.
+
 - **Trails — a native crash, now fixed and understood (kept here so the
   error stays findable)**: `03_detect_trails.py` used to die outright — no
   Python traceback, exit code 127, uncatchable by any `try`/`except` — with
