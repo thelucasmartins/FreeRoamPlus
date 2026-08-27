@@ -37,6 +37,18 @@ TEMP_DIR = DATA_ROOT / "tmp"
 STRUCTURES_PATH = OVERLAYS_DIR / "structures.geojson"
 ROADS_PATH = OVERLAYS_DIR / "roads.geojson"
 
+# NLCD Tree Canopy Cover (USFS, 30m, percent 0-100 per cell) — used by
+# 03_detect_trails.py to switch detection behavior between open terrain
+# and closed canopy (see its docstring). 2013 vintage deliberately: it
+# matches the LiDAR survey's own acquisition year, so the canopy state is
+# the one the point cloud actually saw. Served by MRLC's public GeoServer
+# WCS (confirmed live: WCS 2.0.1, GeoTIFF output, EPSG:5070 native, axis
+# labels X/Y, no registration) — a GetCoverage with a bbox subset returns
+# a clipped GeoTIFF directly, kilobytes for a test-area bbox.
+LANDCOVER_DIR = DATA_ROOT / "landcover"
+MRLC_WCS_URL = "https://www.mrlc.gov/geoserver/ows"
+TCC_COVERAGE_ID = "mrlc_download__nlcd_tcc_conus_2013_v2021-4"
+
 # The OSM pipeline (../pipeline/fetchStructures.ts, fetchRoads.ts) already
 # wrote real data to these paths, under the repo on C: — 02_detect_structures.py
 # and 03_detect_trails.py read from here exactly once, the first time
@@ -124,8 +136,62 @@ DEFAULT_RESOLUTION_M = 1.0
 
 
 def ensure_dirs() -> None:
-    for d in (OVERLAYS_DIR, LIDAR_DIR, DSM_DIR, DTM_DIR, TEMP_DIR):
+    for d in (OVERLAYS_DIR, LIDAR_DIR, DSM_DIR, DTM_DIR, TEMP_DIR, LANDCOVER_DIR):
         d.mkdir(parents=True, exist_ok=True)
+
+
+def fetch_tcc_clip(minlon: float, minlat: float, maxlon: float, maxlat: float):
+    """
+    Downloads (and caches under LANDCOVER_DIR) an NLCD Tree Canopy Cover
+    GeoTIFF clipped to the given WGS84 bbox, via MRLC's WCS. Returns the
+    local Path, or None if the fetch fails — callers treat None as "canopy
+    unknown" and fall back to open-terrain behavior everywhere rather than
+    refusing to run, so this pipeline still works fully offline (just
+    without canopy-aware detection).
+    """
+    import requests
+    from pyproj import Transformer
+
+    LANDCOVER_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = LANDCOVER_DIR / (
+        f"tcc2013_{minlon:.3f}_{minlat:.3f}_{maxlon:.3f}_{maxlat:.3f}.tif"
+    )
+    if cache_path.exists() and cache_path.stat().st_size > 0:
+        return cache_path
+
+    # WCS 2.0.1 subsets use the coverage's native CRS (EPSG:5070 Albers,
+    # axis labels X/Y — confirmed via DescribeCoverage). Pad by 1km so
+    # tile-edge pixels never sample outside the clip.
+    to_albers = Transformer.from_crs("EPSG:4326", "EPSG:5070", always_xy=True)
+    corners = [
+        to_albers.transform(lon, lat)
+        for lon in (minlon, maxlon)
+        for lat in (minlat, maxlat)
+    ]
+    xs = [c[0] for c in corners]
+    ys = [c[1] for c in corners]
+    pad = 1000.0
+    params = {
+        "service": "WCS",
+        "version": "2.0.1",
+        "request": "GetCoverage",
+        "coverageId": TCC_COVERAGE_ID,
+        "subset": [
+            f"X({min(xs) - pad},{max(xs) + pad})",
+            f"Y({min(ys) - pad},{max(ys) + pad})",
+        ],
+        "format": "image/geotiff",
+    }
+    try:
+        response = requests.get(MRLC_WCS_URL, params=params, timeout=120)
+        response.raise_for_status()
+        if not response.content.startswith((b"II", b"MM")):  # not a TIFF — probably a WCS error document
+            raise RuntimeError(f"WCS returned non-TIFF content: {response.content[:200]!r}")
+        cache_path.write_bytes(response.content)
+        return cache_path
+    except Exception as e:  # noqa: BLE001 -- degrade to canopy-unaware detection, never block the run
+        print(f"Warning: NLCD canopy fetch failed ({e}) — running without canopy-aware detection.")
+        return None
 
 
 def verify_blas_works() -> None:

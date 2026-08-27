@@ -206,11 +206,17 @@ clearance under dense oak/fir canopy, which is exactly where Sonoma's real
 singletrack mostly lives — so the detector only ever sees trails where
 they cross open ground, and everything it flagged in open ground so far
 was the edge of a wider clearing (now filtered — see the pipeline
-README's "cap-pinned" note). The likely real fix is a land-cover /
-tree-canopy cross-reference against a county land-cover layer, **not yet
-implemented**. Until then, expect `roads.geojson` to carry few or no
-`source: "lidar"` features, and treat that as honest output rather than a
-pipeline failure.
+README's "cap-pinned" note). The land-cover / tree-canopy cross-reference
+that was proposed as the likely fix **has since been implemented and
+evaluated (2026-08-27): it does not help** — measured along 8.6km of
+Annadel's mapped trails, the DSM over the trails is canopy top (median
+13.8m above ground), so no clearance threshold recovers them; the code
+stays behind `03_detect_trails.py --canopy-mode` (off by default) for
+reproducibility. See the pipeline README's canopy bullet for the numbers
+and for the one remaining plausible approach (DTM micro-topography, not
+attempted). Until something like that exists, expect `roads.geojson` to
+carry few or no `source: "lidar"` features, and treat that as honest
+output rather than a pipeline failure.
 
 To produce the real file:
 

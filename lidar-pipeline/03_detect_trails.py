@@ -159,6 +159,26 @@ reduce this further, each checked against real data, not assumed:
     (the elongated, kept one) sits at almost the identical distance
     (~20m) as the one that should stay *strict* (the compact, rejected
     one, ~21.5m). Proximity to a mapped building doesn't distinguish them.
+  - NLCD canopy-aware detection (the --canopy-mode flag): cross-reference
+    2013 NLCD Tree Canopy Cover (matching the LiDAR's own year; fetched
+    via MRLC's WCS, see common.py) and, under closed canopy (TCC >= 60%),
+    raise the width cap to 8m (fire-road canopy gaps) and the clearance
+    threshold to 2m (overhung tread / understory), skipping the
+    cap-pinned rejection for mostly-canopy paths. Evaluated against
+    Annadel's real mapped trail network and found ineffective — measured
+    directly along 8,605m of Warren Richardson / North Burma / Two Quarry
+    centerline (6,662 nDSM samples): median on-trail nDSM is 13.8m
+    (canopy top), only 12.6% of on-trail pixels clear the 0.4m open
+    threshold and only 18.3% clear the relaxed 2m one, so the corridor
+    stays ~80% erased at any threshold — the signal simply isn't in a
+    max-surface DSM under closed canopy, and no amount of land-cover
+    context recovers absent signal. The only observed behavioral change
+    was a new false-positive surface: tree-lined *streets* (TCC >= 60%
+    over pavement) escape the cap-pinned rejection. Off by default for
+    exactly that reason. The remaining plausible signal for under-canopy
+    trails is DTM micro-topography (the bench cut a sidehill trail carves
+    into the ground surface, which ground returns do capture) — a
+    substantially different detector, not attempted.
   A different kind of signal — not just a different window/statistic over
   the same clearance-shape data — would be needed to close this specific
   gap further; see docs/DATA.md-style honesty: this is a real, bounded,
@@ -175,6 +195,7 @@ import json
 import geopandas as gpd
 import numpy as np
 import rasterio
+from rasterio.warp import Resampling, reproject
 from scipy import ndimage
 from shapely.geometry import LineString, box, shape
 from shapely.ops import unary_union
@@ -187,9 +208,12 @@ from common import (
     DTM_DIR,
     LEGACY_ROADS_PATH,
     OUTPUT_CRS,
+    REGION_NE,
+    REGION_SW,
     ROADS_PATH,
     WORKING_CRS,
     ensure_dirs,
+    fetch_tcc_clip,
     read_ndsm,
     verify_blas_works,
 )
@@ -211,6 +235,41 @@ MAX_TRAIL_WIDTH_M = 4.0  # generous upper bound past the 3m ATV band, to allow s
 # it's excluded as the price of killing the dominant false-positive class
 # (the purple/pink <3m bands this script exists to find are unaffected).
 CAP_PINNED_WIDTH_M = 3.9
+# Canopy-aware detection (NLCD Tree Canopy Cover, 2013 — the LiDAR survey's
+# own year; see common.py's fetch_tcc_clip). The cap-pinned evidence above
+# is entirely from *open* terrain — under closed canopy the same signal
+# means the opposite thing: a wide, ground-level linear gap punched through
+# oak/fir canopy is characteristically a fire road or doubletrack, because
+# natural clearings that are long, thin, AND ground-level are rare in
+# closed canopy. So where TCC >= TCC_CANOPY_THRESHOLD:
+#   - the per-pixel width cap rises to CANOPY_MAX_TRAIL_WIDTH_M (a fire
+#     road's canopy gap is typically 4-8m — under the open-terrain 4m cap
+#     those corridors never even reached candidacy), and
+#   - the cap-pinned-median rejection is skipped for paths that are mostly
+#     (>= CANOPY_PATH_FRACTION) under canopy.
+# Open terrain (TCC below threshold) behaves exactly as before — every
+# confirmed false-positive class lives there and stays filtered. If the
+# TCC download fails (offline), everything runs in open mode, identical to
+# pre-canopy behavior.
+# Note: MIN_CLEARANCE_ELONGATION's fine-sweep calibration only covered
+# widths up to 4m. The window radius scales with local width (ratio 3), so
+# the geometry is scale-free and discretization artifacts shrink as widths
+# grow — but if canopy-mode candidates come out suspiciously absent,
+# re-run that sweep extended to 8m before trusting the elongation filter
+# at these widths.
+TCC_CANOPY_THRESHOLD = 60  # percent tree canopy at/above which a cell counts as closed canopy
+CANOPY_MAX_TRAIL_WIDTH_M = 8.0
+CANOPY_PATH_FRACTION = 0.5
+# Under canopy, "cleared" can't mean nDSM < 0.4m: canopy overhangs the
+# tread (the DSM cell catches branches over a real fire road), and
+# understory brush of a meter or two flanks it, so the strict threshold
+# shreds a real corridor into fragments shorter than MIN_TRAIL_LENGTH_M
+# or erases it entirely. Where TCC >= TCC_CANOPY_THRESHOLD the clearance
+# threshold rises to this instead — anything under ~2m of vegetation
+# height still reads as a corridor relative to a 15-40m canopy. Open
+# terrain keeps the strict 0.4m; every confirmed false positive came from
+# there and this doesn't touch it.
+CANOPY_CLEARANCE_THRESHOLD_M = 2.0
 MIN_TRAIL_LENGTH_M = 15.0
 MIN_CLEARANCE_ELONGATION = 4.0  # local major/minor axis ratio required — see module docstring
 # The local elongation window scales with each pixel's own local width
@@ -304,12 +363,37 @@ def compute_elongation_ok(candidate_mask, clearance_labels, dist_m, resolution: 
     return elongation_ok
 
 
-def detect_in_tile(dsm_path, dtm_path, resolution: float):
+def detect_in_tile(dsm_path, dtm_path, resolution: float, tcc=None):
+    """
+    tcc: optional (array, transform, crs) triple of NLCD Tree Canopy Cover
+    percent values covering this tile's area — None means canopy unknown,
+    and the whole tile runs in open-terrain mode (the pre-canopy behavior).
+    """
     ndsm, valid, transform = read_ndsm(dsm_path, dtm_path)
     if ndsm is None:  # DSM/DTM don't overlap at all — see read_ndsm's docstring
         return []
 
-    clearance = valid & (ndsm < LOW_VEG_THRESHOLD_M) & (ndsm > -CLEARANCE_NOISE_TOLERANCE_M)
+    # Nearest-neighbor-resample the 30m canopy raster onto this tile's own
+    # 1m grid — 30m is far coarser than any trail, but it's answering a
+    # 30m-scale question (is this *area* under closed canopy), not a
+    # trail-scale one.
+    canopy_mask = np.zeros(ndsm.shape, dtype=bool)
+    if tcc is not None:
+        tcc_array, tcc_transform, tcc_crs = tcc
+        tcc_on_tile = np.full(ndsm.shape, 255, dtype=np.uint8)  # 255 = nodata -> not canopy
+        reproject(
+            source=tcc_array,
+            destination=tcc_on_tile,
+            src_transform=tcc_transform,
+            src_crs=tcc_crs,
+            dst_transform=transform,
+            dst_crs=WORKING_CRS,
+            resampling=Resampling.nearest,
+        )
+        canopy_mask = (tcc_on_tile >= TCC_CANOPY_THRESHOLD) & (tcc_on_tile <= 100)
+
+    clearance_threshold = np.where(canopy_mask, CANOPY_CLEARANCE_THRESHOLD_M, LOW_VEG_THRESHOLD_M)
+    clearance = valid & (ndsm < clearance_threshold) & (ndsm > -CLEARANCE_NOISE_TOLERANCE_M)
     clearance = ndimage.binary_opening(clearance, structure=np.ones((3, 3)))
     if not clearance.any():
         return []
@@ -323,8 +407,11 @@ def detect_in_tile(dsm_path, dtm_path, resolution: float):
     skeleton = skeletonize(clearance)
 
     # The width filter: strip out skeleton pixels wider than a trail could
-    # be (see module docstring).
-    width_ok = skeleton & (dist_m * 2 <= MAX_TRAIL_WIDTH_M)
+    # be (see module docstring). The cap is per-pixel: 4m in the open, 8m
+    # under closed canopy, where wider corridors (fire-road canopy gaps)
+    # are exactly what we're trying to recover — see TCC_CANOPY_THRESHOLD.
+    width_cap = np.where(canopy_mask, CANOPY_MAX_TRAIL_WIDTH_M, MAX_TRAIL_WIDTH_M)
+    width_ok = skeleton & (dist_m * 2 <= width_cap)
     if not width_ok.any():
         return []
 
@@ -350,9 +437,18 @@ def detect_in_tile(dsm_path, dtm_path, resolution: float):
         coords = skel_obj.path_coordinates(i)  # (row, col) pixel coordinates, in order
         widths = [2 * dist_m[int(round(r)), int(round(c))] for r, c in coords]
         median_width_m = float(np.median(widths))
-        if median_width_m <= 0 or median_width_m >= CAP_PINNED_WIDTH_M:
-            # >= CAP_PINNED_WIDTH_M: the cap-pinned-median false-positive
-            # signature — see that constant's comment for the evidence.
+        canopy_fraction = float(
+            np.mean([canopy_mask[int(round(r)), int(round(c))] for r, c in coords])
+        )
+        if canopy_fraction >= CANOPY_PATH_FRACTION:
+            # Mostly under closed canopy: a wide ground-level gap here is
+            # the signal, not the noise — no cap-pinned rejection, wider
+            # cap. See TCC_CANOPY_THRESHOLD's comment.
+            if median_width_m <= 0 or median_width_m > CANOPY_MAX_TRAIL_WIDTH_M:
+                continue
+        elif median_width_m <= 0 or median_width_m >= CAP_PINNED_WIDTH_M:
+            # Open terrain: >= CAP_PINNED_WIDTH_M is the cap-pinned-median
+            # false-positive signature — see that constant's comment.
             continue
 
         world_coords = [transform * (c, r) for r, c in coords]
@@ -382,6 +478,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bbox", nargs=4, type=float, metavar=("MINLON", "MINLAT", "MAXLON", "MAXLAT"))
     parser.add_argument("--resolution", type=float, default=1.0, help="Must match the resolution used in 01_generate_dsm_dtm.py")
+    parser.add_argument(
+        "--canopy-mode",
+        action="store_true",
+        help="Enable NLCD-canopy-aware detection (evaluated, found ineffective on this dataset — see module docstring; off by default)",
+    )
     args = parser.parse_args()
 
     ensure_dirs()
@@ -401,6 +502,25 @@ def main() -> None:
         aoi_wgs84 = box(*args.bbox)
         aoi = gpd.GeoSeries([aoi_wgs84], crs=OUTPUT_CRS).to_crs(WORKING_CRS).iloc[0]
 
+    # Canopy-aware mode is off by default — implemented, evaluated against
+    # real terrain, and found not to help (see "What was tried and didn't
+    # help" in the module docstring: on-trail nDSM under Annadel's canopy
+    # is canopy-top for ~80%+ of every known trail's length, so no
+    # clearance threshold recovers a corridor). Kept behind a flag so the
+    # negative result stays reproducible, and in case a future dataset
+    # (better canopy, better LiDAR) changes the calculus.
+    tcc = None
+    if args.canopy_mode:
+        if args.bbox:
+            fetch_bounds = args.bbox
+        else:
+            fetch_bounds = [REGION_SW[0], REGION_SW[1], REGION_NE[0], REGION_NE[1]]
+        tcc_path = fetch_tcc_clip(*fetch_bounds)
+        if tcc_path is not None:
+            with rasterio.open(tcc_path) as tcc_ds:
+                tcc = (tcc_ds.read(1), tcc_ds.transform, tcc_ds.crs)
+            print(f"Canopy-aware detection on (NLCD TCC 2013, threshold {TCC_CANOPY_THRESHOLD}%)")
+
     all_segments = []
     skipped = 0
     for dsm_path, dtm_path in tqdm(pairs, desc="Tiles"):
@@ -410,7 +530,7 @@ def main() -> None:
             if not tile_bounds.intersects(aoi):
                 continue
         try:
-            all_segments.extend(detect_in_tile(dsm_path, dtm_path, args.resolution))
+            all_segments.extend(detect_in_tile(dsm_path, dtm_path, args.resolution, tcc=tcc))
         except Exception as e:  # noqa: BLE001 -- one bad tile shouldn't lose every other tile's real detections
             skipped += 1
             print(f"Skipping {dsm_path.name}: {e}")
@@ -442,12 +562,14 @@ def main() -> None:
         .buffer(EXISTING_ROAD_BUFFER_M / 111000)  # buffer in WGS84 degrees, generous for a meters-scale tolerance
     )
     existing_lines = []
+    existing_props = []
     for f in existing["features"]:
         if f["geometry"] is None:
             continue
         geom = shape(f["geometry"])
         if geom.intersects(relevant_area):
             existing_lines.append(geom)
+            existing_props.append(f.get("properties") or {})
 
     if existing_lines:
         existing_gdf = gpd.GeoDataFrame(geometry=existing_lines, crs=OUTPUT_CRS).to_crs(WORKING_CRS)
@@ -460,6 +582,42 @@ def main() -> None:
 
         keep_mask = candidates_gdf.geometry.apply(is_mostly_new)
         new_segments = candidates_gdf[keep_mask]
+
+        # Truth metric, printed rather than silently discarded: a candidate
+        # that coincides with an already-mapped OSM way is a *successful
+        # detection* of something real (dedup rightly doesn't re-add it, but
+        # for evaluating whether this detector can find actual trails at
+        # all, these matches are the only ground truth available offline).
+        # Attribute each dropped candidate to the existing feature it
+        # overlaps most, and summarize what kind of thing it matched —
+        # protectedLand + a name is, in practice, a park trail or fire road;
+        # an unprotected named match is a street. See the canopy-limitation
+        # notes in README.md for why this number is the go/no-go signal for
+        # the land-cover work.
+        matched = candidates_gdf[~keep_mask]
+        if len(matched) > 0:
+            per_feature_buffers = existing_gdf.geometry.buffer(EXISTING_ROAD_BUFFER_M)
+            matched_summaries = []
+            for line in matched.geometry:
+                best_i, best_overlap = None, 0.0
+                hit_idx = per_feature_buffers.sindex.query(line, predicate="intersects")
+                for i in hit_idx:
+                    overlap = line.intersection(per_feature_buffers.iloc[i]).length
+                    if overlap > best_overlap:
+                        best_i, best_overlap = i, overlap
+                if best_i is not None:
+                    props = existing_props[int(best_i)]
+                    matched_summaries.append(
+                        (props.get("name"), bool(props.get("protectedLand")), props.get("access"))
+                    )
+            print(f"OSM-match metric: {len(matched)} candidate(s) coincide with mapped OSM ways:")
+            # NOTE: protectedLand is NOT a reliable trail indicator — checked
+            # directly: Annadel's own named trails (Warren Richardson, North
+            # Burma, Two Quarry) all carry protectedLand=False in the real
+            # fetchRoads.ts output, so judge these matches by name, not flag.
+            for name, prot, access in sorted(set(matched_summaries), key=lambda m: (not m[1], str(m[0]))):
+                kind = "protected" if prot else "unprotected"
+                print(f"  matched: name={name!r} ({kind}, access={access})")
     else:
         new_segments = candidates_gdf
 

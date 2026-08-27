@@ -294,16 +294,27 @@ both:
   real unmapped trail — see the canopy limitation below for the likely
   reason, and treat any future "0 candidates" result on wildland
   terrain as expected behavior, not a bug.
-- **Trails — canopy cover, still open**: LiDAR can't resolve ground-level
-  clearance under dense oak/fir canopy, and Sonoma's actual singletrack
-  mostly lives exactly there — the probable reason the areas tested so
-  far yielded no real unmapped-trail detections (Annadel's known trails
-  produced nDSM clearance signal only where they cross open meadow).
-  The likely real fix is a land-cover / tree-canopy cross-reference —
-  restrict detection thresholds (or at least interpretation) by whether
-  a candidate sits under mapped canopy, using a real county land-cover
-  layer if one can be found (the same fix flagged for structures above).
-  **Not yet implemented.**
+- **Trails — canopy cover, still open (and the land-cover fix has now
+  been tried and ruled out)**: LiDAR's max-surface DSM can't resolve
+  ground-level clearance under dense oak/fir canopy, and Sonoma's actual
+  singletrack mostly lives exactly there. The previously-proposed fix —
+  an NLCD Tree Canopy Cover cross-reference that relaxes thresholds
+  under canopy — **was implemented and evaluated on 2026-08-27, and does
+  not work on this dataset**: measured directly along 8,605m of
+  Annadel's mapped Warren Richardson / North Burma / Two Quarry
+  centerlines, median on-trail nDSM is 13.8m (canopy top); only 12.6%
+  of on-trail pixels clear the open-terrain 0.4m threshold and only
+  18.3% clear a canopy-relaxed 2m one, so no threshold reconnects a
+  corridor that is ~80% missing from the signal itself. The only
+  behavioral change observed was a new false-positive surface
+  (tree-lined streets escaping the cap-pinned rejection). The
+  implementation is kept behind `--canopy-mode` (off by default) purely
+  so the negative result stays reproducible — see the "What was tried
+  and didn't help" ledger in `03_detect_trails.py`'s docstring for the
+  full numbers. The remaining plausible approach for under-canopy trails
+  is **DTM micro-topography** (detecting the bench cut a sidehill trail
+  leaves in the ground surface, which ground returns do capture) — a
+  substantially different detector, not attempted.
 - **Trails**: false positives from drainage ditches, fence lines, and
   vineyard/agricultural access rows narrow enough to pass both the width
   and elongation filters (see `03_detect_trails.py`'s docstring for what
