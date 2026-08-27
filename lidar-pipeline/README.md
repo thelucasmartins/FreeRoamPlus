@@ -319,10 +319,60 @@ both:
   exactly the doubletrack that has some signal left, without those cells
   registering as closed canopy (TCC >= 60%), while fully-gated closed
   canopy has no signal at all. No TCC threshold fixes that, and the
-  test's only candidate was a confirmed powerline-cut false positive. The remaining plausible approach for under-canopy trails
-  is **DTM micro-topography** (detecting the bench cut a sidehill trail
-  leaves in the ground surface, which ground returns do capture) — a
-  substantially different detector, not attempted.
+  test's only candidate was a confirmed powerline-cut false positive.
+- **Trails — DTM micro-topography (bench-cut detection): signal is real,
+  a blind detector still isn't**. The idea that survived the canopy
+  work: ground returns *do* penetrate canopy, so instead of looking for
+  a clearance gap overhead, look for the flattened shelf a constructed
+  sidehill trail leaves in the bare-earth DTM. Probed on 2026-08-27
+  against 32km of mapped trail (Warren Richardson, North Burma, Two
+  Quarry, Marsh, Lawndale, Ridge, Schultz, Pig Flat), sampling a ±10m
+  cross-slope transect every 5m against paired controls 30m off the
+  same perpendicular. **The signal is genuinely there**, unlike
+  everything else in this ledger: flatness ratio (tread gradient ÷
+  ambient cross-slope) median 0.15 on trail vs 0.58 on control over 693
+  paired sidehill samples, trail flatter than its own paired control
+  82.8% of the time — and crucially it *survives closed canopy*
+  (TCC ≥ 60%: 0.23 vs 0.52, P=75.3%), the regime where every nDSM-based
+  approach sees nothing at all.
+    Two findings then killed the detector, not the signal.
+    First, the shape isn't what the cut-and-fill model predicts: the
+  elevation residual at the flattest point versus the ambient slope
+  line is ≈0 (−0.05m trail, +0.04m control). There is no measurable cut
+  on the uphill side or fill lip on the downhill side — only
+  *flattening*, a shelf sitting on the natural slope line. A detector
+  keyed to cut/fill asymmetry would find nothing.
+    Second, and decisive: the probe measured the statistic at *known
+  locations with known orientation*, and a real detector has neither.
+  Re-measured blind (every pixel, min-over-K transect orientations,
+  no centerline search) on three no-mapped-way sidehill control tiles:
+  searching orientations inflates the control false-positive rate ~3×
+  at K=12 (3.4% of sidehill pixels below threshold at K=1 → 10.1% at
+  K=12 → 12.5% at K=24, still climbing with finer angular sampling),
+  while trail pixels only reach a 25.6% bench rate — about 2.4×
+  enrichment, because trail transects were already near-optimally
+  oriented and had nowhere to improve. The continuity filter that
+  looked so promising (495m of unbroken bench along a known centerline,
+  vs 40m max on controls) then collapses: at the 0.33 threshold the
+  trail tiles produce **zero** skeleton paths ≥50m while a control tile
+  produces one, and at every looser threshold the controls keep pace
+  (0.70: 2.33 paths ≥50m per trail tile vs 1.67 per trail-free control,
+  a 1.4× ratio → roughly 17,000 false candidates county-wide from
+  trail-free tiles alone).
+    The reason is worth recording: that 495m coherent run existed
+  because orientation stayed consistent along the path *by
+  construction*, being ground truth. A blind search picks whichever
+  direction looks flattest at each pixel independently, producing
+  spatially incoherent speckle that never assembles into long connected
+  structures. The coherence was largely the ground truth leaking into
+  the measurement — a good cautionary tale for the next probe.
+    What would actually be required is orientation coherence as an
+  explicit optimization term rather than a per-pixel maximum: minimal-
+  path/geodesic tracking through an (position, direction) state space,
+  or Hough-style accumulation. That is categorically bigger than this
+  pipeline's threshold-and-skeletonize architecture, with no evidence
+  yet that it clears the same false-positive arithmetic. **Not
+  attempted, and not recommended on current evidence.**
 - **Trails**: false positives from drainage ditches, fence lines, and
   vineyard/agricultural access rows narrow enough to pass both the width
   and elongation filters (see `03_detect_trails.py`'s docstring for what

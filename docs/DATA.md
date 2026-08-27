@@ -212,11 +212,23 @@ evaluated (2026-08-27): it does not help** — measured along 8.6km of
 Annadel's mapped trails, the DSM over the trails is canopy top (median
 13.8m above ground), so no clearance threshold recovers them; the code
 stays behind `03_detect_trails.py --canopy-mode` (off by default) for
-reproducibility. See the pipeline README's canopy bullet for the numbers
-and for the one remaining plausible approach (DTM micro-topography, not
-attempted). Until something like that exists, expect `roads.geojson` to
-carry few or no `source: "lidar"` features, and treat that as honest
-output rather than a pipeline failure.
+reproducibility. The successor idea — **DTM micro-topography**, detecting
+the flattened shelf a sidehill trail leaves in the *bare-earth* surface
+(which ground returns capture even under canopy) — was probed on
+2026-08-27 and is a more interesting result: the signal is genuinely
+there (flatness ratio 0.15 on trail vs 0.58 on paired controls across
+32km of mapped trail, and it survives closed canopy), but a *blind*
+detector still can't exploit it — searching transect orientations, which
+a real detector must, inflates the false-positive rate ~3x and collapses
+the continuity filter to a 1.4x separation. Both are documented with
+full numbers in the pipeline README's canopy bullet and in
+`03_detect_trails.py`'s negative-results ledger.
+
+Practical consequence for this overlay: expect `roads.geojson` to carry
+few or no `source: "lidar"` features, and treat that as honest output
+rather than a pipeline failure. The purple/pink width bands remain fully
+implemented on the app side and will render correctly if a future
+detector ever produces real features for them.
 
 To produce the real file:
 

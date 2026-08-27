@@ -192,11 +192,31 @@ reduce this further, each checked against real data, not assumed:
     corridor without registering as "closed", so no gating threshold
     both reaches these trails and stays off open terrain. The run's only
     candidate was a 17m fragment 74m from Powerline Trail — the
-    predicted powerline-cut false positive, confirmed. The remaining
-    plausible signal for under-canopy trails is DTM micro-topography
-    (the bench cut a sidehill trail carves into the ground surface,
-    which ground returns do capture) — a substantially different
-    detector, not attempted.
+    predicted powerline-cut false positive, confirmed.
+  - DTM micro-topography (bench-cut detection): the successor idea to
+    the canopy work — ground returns do penetrate canopy, so look for
+    the flattened shelf a sidehill trail leaves in the bare-earth DTM
+    rather than a gap overhead. Probed against 32km of mapped trail:
+    the signal is REAL (flatness ratio, tread gradient / ambient
+    cross-slope, median 0.15 on trail vs 0.58 on paired 30m-offset
+    controls, n=693; trail flatter 82.8% of the time; survives closed
+    canopy at 0.23 vs 0.52). It is not a cut-and-fill bench though —
+    elevation residual vs the ambient slope line is ~0 (-0.05m), i.e.
+    pure flattening, no uphill cut or downhill fill lip to key on.
+    Ruled out as a detector by a blind-search test: searching K
+    orientations (which a real detector must, having no ground-truth
+    trail direction) inflates the control false-positive rate ~3x at
+    K=12 and keeps climbing with K, while trail pixels only reach a
+    25.6% bench rate — and the continuity filter that looked decisive
+    on known centerlines (495m unbroken run vs 40m on controls) then
+    collapses to a 1.4x path-count ratio, i.e. ~17k false county-wide
+    candidates. The earlier coherence was largely ground-truth
+    orientation leaking into the measurement. Closing it would need
+    orientation coherence as an explicit optimization term (geodesic /
+    minimal-path tracking over position+direction, or Hough-style
+    accumulation) — categorically bigger than this pipeline's
+    threshold-and-skeletonize design, and not recommended on current
+    evidence. See README.md's canopy bullet for the full numbers.
   A different kind of signal — not just a different window/statistic over
   the same clearance-shape data — would be needed to close this specific
   gap further; see docs/DATA.md-style honesty: this is a real, bounded,
