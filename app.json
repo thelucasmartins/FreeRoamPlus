@@ -8,7 +8,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.lucasmartins.freeroamplus"
+      "bundleIdentifier": "com.lucasmartins.freeroamplus",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.lucasmartins.freeroamplus",
