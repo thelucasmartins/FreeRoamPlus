@@ -21,7 +21,8 @@ interface RoutePanelProps {
   onDismiss: () => void;
   /** Elevation profile for the current route, if a DEM grid covers it (spec §13). */
   elevationProfile: ElevationProfile | null;
-  onSaveWaypoint: (note: string) => void;
+  /** Returns false if the write failed (e.g. full storage) — the panel shows an inline error instead of "saved" in that case. */
+  onSaveWaypoint: (note: string) => boolean;
 }
 
 const MESSAGES: Record<'needs-location' | 'waiting-for-fix', string> = {
@@ -53,6 +54,7 @@ export function RoutePanel({
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [justSaved, setJustSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   // A fresh long-press/search result means a fresh point — don't carry
   // save-in-progress state from whatever was held before.
@@ -60,12 +62,17 @@ export function RoutePanel({
     setEditingNote(false);
     setNoteDraft('');
     setJustSaved(false);
+    setSaveFailed(false);
   }, [destination]);
 
   const handleSave = () => {
-    onSaveWaypoint(noteDraft);
-    setEditingNote(false);
-    setJustSaved(true);
+    if (onSaveWaypoint(noteDraft)) {
+      setEditingNote(false);
+      setJustSaved(true);
+      setSaveFailed(false);
+    } else {
+      setSaveFailed(true);
+    }
   };
 
   return (
@@ -127,6 +134,9 @@ export function RoutePanel({
               autoFocus
               multiline
             />
+            {saveFailed && (
+              <Text style={styles.errorMessage}>Couldn’t save waypoint — check available storage</Text>
+            )}
             <View style={styles.noteActions}>
               <Pressable onPress={() => setEditingNote(false)}>
                 <Text style={styles.noteCancel}>Cancel</Text>

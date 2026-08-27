@@ -22,16 +22,17 @@ function roadsFile(): File {
  * trusted from the file, so the rule lives in one place.
  */
 export async function loadRoads(): Promise<RoadsResult> {
-  const file = roadsFile();
-  if (!file.exists) {
-    return { data: classifyRoads(SAMPLE_ROADS), isSample: true };
-  }
-
   try {
+    const file = roadsFile();
+    if (!file.exists) {
+      return { data: classifyRoads(SAMPLE_ROADS), isSample: true };
+    }
     const raw = (await file.json()) as RoadFeatureCollection;
     return { data: classifyRoads(raw), isSample: false };
   } catch {
-    // Malformed on-device file — fall back rather than breaking the map.
+    // Missing, malformed, or unreadable on-device file — fall back rather
+    // than breaking the map (also covers a native fs error from `.exists`
+    // itself, not just a JSON parse failure).
     return { data: classifyRoads(SAMPLE_ROADS), isSample: true };
   }
 }

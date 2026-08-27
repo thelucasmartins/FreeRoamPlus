@@ -14,6 +14,10 @@ export function searchIndex(index: SearchIndex, query: string, limit = DEFAULT_L
 
   const ranked: { entry: SearchEntry; rank: number }[] = [];
   for (const entry of index) {
+    // A hand-edited or partially-written index file could carry an entry
+    // missing `name` — skip it instead of throwing and taking the whole
+    // search bar down with it.
+    if (typeof entry?.name !== 'string') continue;
     const name = entry.name.toLowerCase();
     let rank: number;
     if (name === normalizedQuery) rank = 0;

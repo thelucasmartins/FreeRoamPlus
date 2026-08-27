@@ -7,9 +7,13 @@ interface BaseLayerSelectorProps {
   onSelect: (id: BaseLayerId) => void;
   satelliteReady: boolean;
   satelliteDownloading: boolean;
+  /** Message from the last failed satellite download attempt, if any. */
+  satelliteError: string | null;
   onDownloadSatellite: () => void;
   lidarReady: boolean;
   lidarDownloading: boolean;
+  /** Message from the last failed LiDAR download attempt, if any. */
+  lidarError: string | null;
   onDownloadLidar: () => void;
   labelsEnabled: boolean;
   onToggleLabels: (enabled: boolean) => void;
@@ -50,9 +54,11 @@ export function BaseLayerSelector({
   onSelect,
   satelliteReady,
   satelliteDownloading,
+  satelliteError,
   onDownloadSatellite,
   lidarReady,
   lidarDownloading,
+  lidarError,
   onDownloadLidar,
   labelsEnabled,
   onToggleLabels,
@@ -66,6 +72,8 @@ export function BaseLayerSelector({
     }
   };
 
+  const error = satelliteError ?? lidarError;
+
   return (
     <View style={styles.wrapper}>
       {active !== 'street' && (
@@ -76,6 +84,11 @@ export function BaseLayerSelector({
             onValueChange={onToggleLabels}
             trackColor={{ true: '#4a6b3a', false: '#ccc4b6' }}
           />
+        </View>
+      )}
+      {error && (
+        <View style={styles.errorBadge}>
+          <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
       <View style={styles.pill}>
@@ -130,6 +143,23 @@ const styles = StyleSheet.create({
   labelsText: {
     fontSize: 12,
     color: '#5d5347',
+  },
+  errorBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 6,
+    maxWidth: 220,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  errorText: {
+    fontSize: 11,
+    color: '#a02c2c',
   },
   pill: {
     flexDirection: 'row',

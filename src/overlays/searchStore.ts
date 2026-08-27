@@ -19,15 +19,16 @@ function searchIndexFile(): File {
  * on-device at overlays/search-index.json, otherwise the bundled sample.
  */
 export async function loadSearchIndex(): Promise<SearchIndexResult> {
-  const file = searchIndexFile();
-  if (!file.exists) {
-    return { index: SAMPLE_SEARCH_INDEX, isSample: true };
-  }
-
   try {
+    const file = searchIndexFile();
+    if (!file.exists) {
+      return { index: SAMPLE_SEARCH_INDEX, isSample: true };
+    }
     const index = (await file.json()) as SearchIndex;
     return { index, isSample: false };
   } catch {
+    // Also covers a native fs error from `.exists` itself, not just a JSON
+    // parse failure.
     return { index: SAMPLE_SEARCH_INDEX, isSample: true };
   }
 }

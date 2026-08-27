@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { DEV_FALLBACK_STYLE_URL } from './src/config';
 import { buildOfflineStyle } from './src/map/style';
 import { getStatus, type TileStoreStatus } from './src/offline/tileStore';
+import { ErrorBoundary } from './src/screens/ErrorBoundary';
 import { MapScreen } from './src/screens/MapScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 
@@ -52,7 +53,7 @@ export default function App() {
 
   return (
     <>
-      {content}
+      <ErrorBoundary>{content}</ErrorBoundary>
       <StatusBar style="dark" />
     </>
   );

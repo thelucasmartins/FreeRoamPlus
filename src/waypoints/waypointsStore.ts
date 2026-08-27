@@ -13,23 +13,32 @@ function waypointsFile(): File {
  * local file shouldn't block the rest of the app from loading.
  */
 export async function loadWaypoints(): Promise<Waypoint[]> {
-  const file = waypointsFile();
-  if (!file.exists) return [];
-
   try {
+    const file = waypointsFile();
+    if (!file.exists) return [];
     return (await file.json()) as Waypoint[];
   } catch {
     return [];
   }
 }
 
-/** Persists the full waypoint list, overwriting whatever was there before. */
+/**
+ * Persists the full waypoint list, overwriting whatever was there before.
+ * Unlike loadWaypoints, this one does throw — a failed write (full disk,
+ * permissions) needs to reach the caller so it can avoid telling the user
+ * their waypoint was saved when it wasn't, rather than being swallowed here.
+ */
 export function saveWaypoints(waypoints: Waypoint[]): void {
-  const file = waypointsFile();
-  if (!file.exists) {
-    file.create({ intermediates: true });
+  try {
+    const file = waypointsFile();
+    if (!file.exists) {
+      file.create({ intermediates: true });
+    }
+    file.write(JSON.stringify(waypoints));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not save waypoints — check available storage. (${reason})`);
   }
-  file.write(JSON.stringify(waypoints));
 }
 
 function randomId(): string {

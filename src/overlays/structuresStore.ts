@@ -21,16 +21,17 @@ function structuresFile(): File {
  * (spec §9) has run.
  */
 export async function loadStructures(): Promise<StructuresResult> {
-  const file = structuresFile();
-  if (!file.exists) {
-    return { data: SAMPLE_STRUCTURES, isSample: true };
-  }
-
   try {
+    const file = structuresFile();
+    if (!file.exists) {
+      return { data: SAMPLE_STRUCTURES, isSample: true };
+    }
     const data = (await file.json()) as StructureFeatureCollection;
     return { data, isSample: false };
   } catch {
-    // Malformed on-device file — fall back rather than breaking the map.
+    // Missing, malformed, or unreadable on-device file — fall back rather
+    // than breaking the map (also covers a native fs error from `.exists`
+    // itself, not just a JSON parse failure).
     return { data: SAMPLE_STRUCTURES, isSample: true };
   }
 }

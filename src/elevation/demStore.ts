@@ -19,15 +19,16 @@ function demFile(): File {
  * at overlays/dem.json, otherwise the bundled synthetic grid.
  */
 export async function loadDem(): Promise<DemResult> {
-  const file = demFile();
-  if (!file.exists) {
-    return { grid: SAMPLE_DEM, isSample: true };
-  }
-
   try {
+    const file = demFile();
+    if (!file.exists) {
+      return { grid: SAMPLE_DEM, isSample: true };
+    }
     const grid = (await file.json()) as ElevationGrid;
     return { grid, isSample: false };
   } catch {
+    // Also covers a native fs error from `.exists` itself, not just a JSON
+    // parse failure.
     return { grid: SAMPLE_DEM, isSample: true };
   }
 }

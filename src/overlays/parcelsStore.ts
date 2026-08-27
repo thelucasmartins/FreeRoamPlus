@@ -27,15 +27,16 @@ function parcelsFile(): File {
  * if the on-device file is missing or malformed.
  */
 export async function loadParcels(): Promise<ParcelsResult> {
-  const file = parcelsFile();
-  if (!file.exists) {
-    return { data: SAMPLE_PARCELS, isSample: true };
-  }
-
   try {
+    const file = parcelsFile();
+    if (!file.exists) {
+      return { data: SAMPLE_PARCELS, isSample: true };
+    }
     const data = (await file.json()) as ParcelFeatureCollection;
     return { data, isSample: false };
   } catch {
+    // Also covers a native fs error from `.exists` itself, not just a JSON
+    // parse failure.
     return { data: SAMPLE_PARCELS, isSample: true };
   }
 }

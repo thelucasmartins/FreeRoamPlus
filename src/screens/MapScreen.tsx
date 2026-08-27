@@ -102,8 +102,10 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
   const [labelsEnabled, setLabelsEnabled] = useState(false);
   const [satelliteStatus, setSatelliteStatus] = useState(() => getSatelliteStatus());
   const [satelliteDownloading, setSatelliteDownloading] = useState(false);
+  const [satelliteError, setSatelliteError] = useState<string | null>(null);
   const [lidarStatus, setLidarStatus] = useState(() => getLidarStatus());
   const [lidarDownloading, setLidarDownloading] = useState(false);
+  const [lidarError, setLidarError] = useState<string | null>(null);
 
   const cameraRef = useRef<CameraRef>(null);
 
@@ -156,21 +158,25 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
 
   const handleDownloadSatellite = useCallback(() => {
     setSatelliteDownloading(true);
+    setSatelliteError(null);
     downloadSatelliteTiles()
       .then((status) => {
         setSatelliteStatus(status);
         if (status.ready) setBaseLayer('satellite');
       })
+      .catch((e) => setSatelliteError(e instanceof Error ? e.message : String(e)))
       .finally(() => setSatelliteDownloading(false));
   }, []);
 
   const handleDownloadLidar = useCallback(() => {
     setLidarDownloading(true);
+    setLidarError(null);
     downloadLidarTiles()
       .then((status) => {
         setLidarStatus(status);
         if (status.ready) setBaseLayer('lidar');
       })
+      .catch((e) => setLidarError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLidarDownloading(false));
   }, []);
 
@@ -244,23 +250,38 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
     setRouteDestination(null);
   }, []);
 
+  // Both return whether the write actually landed on disk — React state is
+  // only updated after a successful write, so the UI never claims a
+  // waypoint was saved/deleted when a full disk or permissions error meant
+  // it wasn't (see saveWaypoints, which throws rather than failing
+  // silently). Callers show an inline error on false.
   const handleSaveWaypoint = useCallback(
-    (note: string) => {
-      if (!routeDestination) return;
+    (note: string): boolean => {
+      if (!routeDestination) return false;
       const waypoint = createWaypoint(routeDestination, note);
       const next = [...waypoints, waypoint];
+      try {
+        saveWaypoints(next);
+      } catch {
+        return false;
+      }
       setWaypoints(next);
-      saveWaypoints(next);
+      return true;
     },
     [routeDestination, waypoints],
   );
 
   const handleDeleteWaypoint = useCallback(
-    (id: string) => {
+    (id: string): boolean => {
       const next = waypoints.filter((w) => w.id !== id);
+      try {
+        saveWaypoints(next);
+      } catch {
+        return false;
+      }
       setWaypoints(next);
-      saveWaypoints(next);
       setSelectedWaypoint(null);
+      return true;
     },
     [waypoints],
   );
@@ -380,9 +401,11 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
         onSelect={setBaseLayer}
         satelliteReady={satelliteStatus.ready}
         satelliteDownloading={satelliteDownloading}
+        satelliteError={satelliteError}
         onDownloadSatellite={handleDownloadSatellite}
         lidarReady={lidarStatus.ready}
         lidarDownloading={lidarDownloading}
+        lidarError={lidarError}
         onDownloadLidar={handleDownloadLidar}
         labelsEnabled={labelsEnabled}
         onToggleLabels={setLabelsEnabled}
@@ -390,6 +413,7 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
       <BreadcrumbButton
         recording={breadcrumbRecording}
         hasPoints={breadcrumbPoints.length > 0}
+        gpsUnavailable={locationStatus !== 'granted' || !currentPosition}
         onToggle={handleToggleBreadcrumb}
         onClear={handleClearBreadcrumb}
       />
