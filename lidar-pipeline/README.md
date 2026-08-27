@@ -311,7 +311,15 @@ both:
   implementation is kept behind `--canopy-mode` (off by default) purely
   so the negative result stays reproducible — see the "What was tried
   and didn't help" ledger in `03_detect_trails.py`'s docstring for the
-  full numbers. The remaining plausible approach for under-canopy trails
+  full numbers. A second test on genuine fire-road country (2026-08-28,
+  the mapped doubletrack cluster east of Annadel: 16.4km of Ridge /
+  Marsh / Lawndale / Schultz / Pig Flat / Powerline / Rhyolite) confirmed
+  it structurally: the clearance signal and the canopy gate
+  *anti-correlate* — partial oak canopy erases the nDSM corridor over
+  exactly the doubletrack that has some signal left, without those cells
+  registering as closed canopy (TCC >= 60%), while fully-gated closed
+  canopy has no signal at all. No TCC threshold fixes that, and the
+  test's only candidate was a confirmed powerline-cut false positive. The remaining plausible approach for under-canopy trails
   is **DTM micro-topography** (detecting the bench cut a sidehill trail
   leaves in the ground surface, which ground returns do capture) — a
   substantially different detector, not attempted.

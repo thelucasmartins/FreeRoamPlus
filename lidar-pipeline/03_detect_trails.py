@@ -175,10 +175,28 @@ reduce this further, each checked against real data, not assumed:
     context recovers absent signal. The only observed behavioral change
     was a new false-positive surface: tree-lined *streets* (TCC >= 60%
     over pavement) escape the cap-pinned rejection. Off by default for
-    exactly that reason. The remaining plausible signal for under-canopy
-    trails is DTM micro-topography (the bench cut a sidehill trail carves
-    into the ground surface, which ground returns do capture) — a
-    substantially different detector, not attempted.
+    exactly that reason.
+      Re-tested on genuine fire-road country (the doubletrack cluster
+    east of Annadel toward Hood Mountain/Sugarloaf: Ridge, Marsh, Pig
+    Flat, Schultz, Lawndale, Powerline, Rhyolite — 16,418m of real
+    mapped doubletrack, 13,797 on-trail samples) with a worse-than-null
+    result that closes the question structurally: median on-trail nDSM
+    is 11.3m and only 22.2% clears the relaxed 2m threshold (same
+    physics as Annadel), and — the part no TCC threshold can fix — the
+    signal and the gate anti-correlate. The trails with the most
+    clearance signal sit in low-TCC mosaic cells where canopy mode never
+    activates (Marsh: 38.6% of samples under 2m but only 10.6% of cells
+    at TCC>=60; Powerline: 41.6% / 18.9%), while the one trail canopy
+    mode fully covers has no signal at all (Rhyolite: 83.9% of cells
+    gated, 1.8% under 2m — closed canopy). Partial oak canopy erases the
+    corridor without registering as "closed", so no gating threshold
+    both reaches these trails and stays off open terrain. The run's only
+    candidate was a 17m fragment 74m from Powerline Trail — the
+    predicted powerline-cut false positive, confirmed. The remaining
+    plausible signal for under-canopy trails is DTM micro-topography
+    (the bench cut a sidehill trail carves into the ground surface,
+    which ground returns do capture) — a substantially different
+    detector, not attempted.
   A different kind of signal — not just a different window/statistic over
   the same clearance-shape data — would be needed to close this specific
   gap further; see docs/DATA.md-style honesty: this is a real, bounded,
