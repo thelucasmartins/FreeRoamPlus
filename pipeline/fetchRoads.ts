@@ -13,10 +13,17 @@
  * polygons (national forests, state parks, nature reserves), point-in-
  * polygon tested against each road's midpoint (pipeline/spatial.ts) — not
  * a tag lookup, since individual OSM road ways don't carry a redundant
- * "inside protected land" tag themselves. Only simple closed WAYS are
- * used for protected areas, not multipolygon RELATIONS — some larger
- * protected areas mapped as relations in OSM won't be captured. Flagged,
- * not silently dropped.
+ * "inside protected land" tag themselves. Both simple closed ways AND
+ * multipolygon/boundary RELATIONS are used: an earlier version fetched
+ * ways only, which silently missed essentially every major park in the
+ * county — verified directly against live Overpass, 36 protected areas in
+ * the region bbox are mapped as relations (Trione-Annadel State Park,
+ * Jack London SHP, Sugarloaf Ridge SP, Sonoma Coast SP, Salt Point SP,
+ * Hood Mountain and North Sonoma Mountain Regional Parks among them), and
+ * the miss surfaced as Annadel's own named trails classifying as
+ * unprotected. Relation members are stitched into closed rings
+ * (spatial.ts stitchSegmentsIntoRings); inner rings become polygon holes,
+ * assigned to the outer ring containing them.
  *
  * `access` classification (spec §10's open question — this is a first-pass
  * rule, not a final answer): explicit access=private/no -> private;
@@ -31,7 +38,7 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { REGION_BOUNDS } from '../src/config';
 import type { OsmRoadProperties, RoadFeatureCollection } from '../src/overlays/roadTypes';
 import { queryOverpass, toCoordinates, type OverpassElement } from './overpass';
-import { midpoint, pointInMultiPolygon, type Ring } from './spatial';
+import { midpoint, pointInMultiPolygon, pointInPolygon, stitchSegmentsIntoRings, type Ring } from './spatial';
 
 const OUT_PATH = 'data/overlays/roads.geojson';
 
@@ -53,14 +60,52 @@ async function fetchProtectedAreaPolygons(): Promise<Ring[][]> {
       way["boundary"="protected_area"](${bboxString()});
       way["leisure"="nature_reserve"](${bboxString()});
       way["boundary"="national_park"](${bboxString()});
+      relation["boundary"="protected_area"](${bboxString()});
+      relation["leisure"="nature_reserve"](${bboxString()});
+      relation["boundary"="national_park"](${bboxString()});
     );
     out geom;
   `;
   const elements = await queryOverpass(query);
   const polygons: Ring[][] = [];
+  let relations = 0;
+  let droppedRelations = 0;
+
   for (const el of elements) {
-    if (el.type !== 'way' || !el.geometry || el.geometry.length < 4) continue;
-    polygons.push([toCoordinates(el.geometry)]);
+    if (el.type === 'way' && el.geometry && el.geometry.length >= 4) {
+      polygons.push([toCoordinates(el.geometry)]);
+      continue;
+    }
+    if (el.type !== 'relation' || !el.members) continue;
+
+    relations++;
+    // Members with role "outer" (or no role — common on type=boundary
+    // relations) form the boundary; "inner" members are holes.
+    const outerSegments: Ring[] = [];
+    const innerSegments: Ring[] = [];
+    for (const member of el.members) {
+      if (member.type !== 'way' || !member.geometry || member.geometry.length < 2) continue;
+      (member.role === 'inner' ? innerSegments : outerSegments).push(toCoordinates(member.geometry));
+    }
+
+    const outerRings = stitchSegmentsIntoRings(outerSegments);
+    if (outerRings.length === 0) {
+      droppedRelations++;
+      continue;
+    }
+    const innerRings = stitchSegmentsIntoRings(innerSegments);
+
+    // One polygon per outer ring, holes attached to whichever outer ring
+    // contains them (tested by first vertex — a hole lies entirely inside
+    // exactly one outer ring in valid OSM data).
+    for (const outer of outerRings) {
+      const holes = innerRings.filter((inner) => pointInPolygon(inner[0], [outer]));
+      polygons.push([outer, ...holes]);
+    }
+  }
+
+  if (droppedRelations > 0) {
+    console.log(`  note: ${droppedRelations} of ${relations} protected-area relations had no stitchable closed outer ring and were skipped`);
   }
   return polygons;
 }
@@ -87,7 +132,7 @@ async function fetchRoadWays(): Promise<OverpassElement[]> {
 async function main() {
   console.log('Fetching protected-area polygons...');
   const protectedPolygons = await fetchProtectedAreaPolygons();
-  console.log(`  ${protectedPolygons.length} protected-area ways`);
+  console.log(`  ${protectedPolygons.length} protected-area polygons (simple ways + assembled relation rings)`);
 
   console.log('Fetching highway ways for the whole county bbox (this can take a while)...');
   const ways = await fetchRoadWays();

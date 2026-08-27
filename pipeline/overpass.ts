@@ -9,8 +9,15 @@ export interface OverpassElement {
   tags?: Record<string, string>;
   lat?: number;
   lon?: number;
-  /** Present on ways/relations queried with `out geom`. */
+  /** Present on ways queried with `out geom`. */
   geometry?: { lat: number; lon: number }[];
+  /** Present on relations queried with `out geom` — one entry per member, way members carrying their geometry inline. */
+  members?: {
+    type: 'node' | 'way' | 'relation';
+    ref: number;
+    role?: string;
+    geometry?: { lat: number; lon: number }[];
+  }[];
 }
 
 function sleep(ms: number): Promise<void> {
