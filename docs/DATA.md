@@ -62,6 +62,20 @@ county-scale run is hours long.
   | Peak live heap (postGC) | **1,229 MB** |
   | Peak heap in use | 1,434 MB |
   | postGC after the OSM passes | **305 MB** |
+  | **Peak process RSS** | **1,958 MB** |
+  | Wall time, whole county | **8m 22s** |
+  | Output | 23 MB, 4,230 tiles, z0–14 |
+
+  **The whole county build takes minutes, not hours.** Everyone involved
+  assumed multi-hour and planned around it. Budget accordingly.
+
+  **RSS runs ~460MB above the heap ceiling** — metaspace, thread stacks,
+  direct buffers (~54MB observed) and the mmap'd node map all sit outside
+  `-Xmx`. Any threshold arithmetic reasoning from `-Xmx` alone is wrong by
+  that margin. This is not academic: a `-Xmx2g` run against a 250MB
+  free-memory guard was killed mid-build because 2g + ~460MB overhead
+  leaves ~200MB free as the *steady state* of a healthy run, which no
+  sustained-breach rule can distinguish from distress.
 
   `-Xmx2g` is the right default: peak live is ~1.2GB, so 1500m runs at 82%
   utilisation with thin headroom, and `-Xmx` is a ceiling rather than a
