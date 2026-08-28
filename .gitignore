@@ -49,6 +49,9 @@ yarn-error.*
 __pycache__/
 *.pyc
 
+# local dev-server / bundler logs
+*.log
+
 # Claude Code session-local state (the checked-in files in .claude/ are
 # settings.json and hooks/ — everything else is machine-local)
 .claude/scheduled_tasks.lock
