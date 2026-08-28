@@ -13,19 +13,22 @@
  * succeeds: every call site treats metrics as write-and-forget.
  */
 
+/** Mirrors OverlaySource's discriminant. Roads and search only ever use 'file' or 'sample'. */
+export type OverlayLoadMode = 'tiles' | 'file' | 'sample';
+
 export interface OverlayLoadMetric {
   /** Which overlay this measured. */
   id: string;
-  /** Size of the on-device file in bytes, or null when the sample data was used. */
+  /** How the data reached the app. `tiles` means no GeoJSON parse happened at all. */
+  mode: OverlayLoadMode;
+  /** Size of the on-device file in bytes, or null when bundled sample data was used. */
   fileSizeBytes: number | null;
-  /** Time spent reading + JSON-parsing the file. */
+  /** Time spent reading + JSON-parsing the file. Always 0 in `tiles` mode — that's the point. */
   parseMs: number;
   /** Time spent in post-parse work (e.g. road classification), if any. */
   postProcessMs: number | null;
   /** Total wall-clock time for the load call. */
   totalMs: number;
-  /** True when this measured the bundled sample data rather than real pipeline output. */
-  isSample: boolean;
   /** Feature/entry count, when the shape makes it cheap to determine. */
   featureCount: number | null;
   measuredAt: number;
@@ -53,8 +56,8 @@ export function startTimer(): () => number {
 
 /** One-line summary per overlay, for logging or a debug panel. */
 export function formatLoadMetric(m: OverlayLoadMetric): string {
-  const size = m.fileSizeBytes === null ? 'sample' : `${(m.fileSizeBytes / (1024 * 1024)).toFixed(1)}MB`;
+  const size = m.fileSizeBytes === null ? m.mode : `${(m.fileSizeBytes / (1024 * 1024)).toFixed(1)}MB`;
   const post = m.postProcessMs === null ? '' : ` +${m.postProcessMs}ms post`;
   const count = m.featureCount === null ? '' : ` (${m.featureCount} features)`;
-  return `${m.id}: ${size}${count} — ${m.parseMs}ms parse${post}, ${m.totalMs}ms total`;
+  return `${m.id} [${m.mode}]: ${size}${count} — ${m.parseMs}ms parse${post}, ${m.totalMs}ms total`;
 }

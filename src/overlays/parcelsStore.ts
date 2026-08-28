@@ -1,47 +1,68 @@
 import { File, Paths } from 'expo-file-system';
 
-import { OVERLAYS_DIR_NAME, PARCELS_FILENAME } from '../config';
+import { OVERLAYS_DIR_NAME, PARCELS_FILENAME, PARCELS_SOURCE_LAYER } from '../config';
+import { getOverlayTileStatus } from '../offline/overlayTiles';
 import { recordLoadMetric, startTimer } from './loadMetrics';
 import type { ParcelFeatureCollection } from './parcelTypes';
 import { SAMPLE_PARCELS } from './sampleParcels';
-
-export interface ParcelsResult {
-  data: ParcelFeatureCollection;
-  /** True when this is the bundled placeholder set, not real GIS data. */
-  isSample: boolean;
-}
+import type { OverlaySource } from './overlaySource';
 
 function parcelsFile(): File {
   return new File(Paths.document, OVERLAYS_DIR_NAME, PARCELS_FILENAME);
 }
 
-function sampleResult(elapsed: () => number): ParcelsResult {
+function sampleResult(elapsed: () => number): OverlaySource<ParcelFeatureCollection> {
   recordLoadMetric({
     id: 'parcels',
+    mode: 'sample',
     fileSizeBytes: null,
     parseMs: 0,
     postProcessMs: null,
     totalMs: elapsed(),
-    isSample: true,
     featureCount: SAMPLE_PARCELS.features?.length ?? null,
   });
-  return { data: SAMPLE_PARCELS, isSample: true };
+  return { mode: 'sample', data: SAMPLE_PARCELS };
 }
 
 /**
- * Loads the parcels overlay: real county GIS export if it's been placed
- * on-device at overlays/parcels.geojson, otherwise the bundled sample data.
+ * Loads the parcels overlay (spec §4), resolving tiles first.
  *
- * Spec §10 flags that this layer previously failed to load/render reliably.
- * At true Sonoma County scale (100k+ parcels), a flat GeoJSON file parsed
- * synchronously in JS is the likely failure mode — see docs/DATA.md for the
- * vector-tile approach now being adopted. This loader is correct and safe
- * for a moderate-sized export (a sub-region, or this bundled sample) and
- * degrades to the sample set rather than crashing if the on-device file is
- * missing or malformed.
+ * Spec §10 flags that this layer previously failed to load/render reliably;
+ * the full county export is ~189k features and ~58MB, and parsing that whole
+ * into one GeoJSONSource is the suspected cause (docs/DATA.md §6). So when
+ * parcels.mbtiles is present we return its URL WITHOUT reading
+ * parcels.geojson at all — MapLibre streams the features by viewport
+ * instead.
+ *
+ * Tap-to-inspect is unaffected by the mode: the info card is driven by the
+ * source's own onPress event, which VectorSource supports identically to
+ * GeoJSONSource, not by a lookup against parsed features.
+ *
+ * Falls back to the real GeoJSON when no tiles exist, and to bundled sample
+ * data when neither does.
  */
-export async function loadParcels(): Promise<ParcelsResult> {
+export async function loadParcels(): Promise<OverlaySource<ParcelFeatureCollection>> {
   const elapsed = startTimer();
+
+  try {
+    const tiles = getOverlayTileStatus('parcels');
+    if (tiles.ready && tiles.mbtilesUrl) {
+      recordLoadMetric({
+        id: 'parcels',
+        mode: 'tiles',
+        fileSizeBytes: tiles.sizeBytes,
+        parseMs: 0,
+        postProcessMs: null,
+        totalMs: elapsed(),
+        featureCount: null,
+      });
+      return { mode: 'tiles', tileUrl: tiles.mbtilesUrl, sourceLayer: PARCELS_SOURCE_LAYER };
+    }
+  } catch {
+    // A native fs error checking for the tile database shouldn't strand the
+    // overlay — fall through to the GeoJSON/sample paths below.
+  }
+
   try {
     const file = parcelsFile();
     if (!file.exists) {
@@ -54,14 +75,14 @@ export async function loadParcels(): Promise<ParcelsResult> {
 
     recordLoadMetric({
       id: 'parcels',
+      mode: 'file',
       fileSizeBytes,
       parseMs,
       postProcessMs: null,
       totalMs: elapsed(),
-      isSample: false,
       featureCount: data.features?.length ?? null,
     });
-    return { data, isSample: false };
+    return { mode: 'file', data };
   } catch {
     // Also covers a native fs error from `.exists` itself, not just a JSON
     // parse failure.

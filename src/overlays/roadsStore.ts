@@ -25,7 +25,7 @@ function sampleResult(elapsed: () => number, parseMs: number): RoadsResult {
     parseMs,
     postProcessMs: Date.now() - postStart,
     totalMs: elapsed(),
-    isSample: true,
+    mode: 'sample',
     featureCount: data.features?.length ?? null,
   });
   return { data, isSample: true };
@@ -66,7 +66,7 @@ export async function loadRoads(): Promise<RoadsResult> {
       parseMs,
       postProcessMs,
       totalMs: elapsed(),
-      isSample: false,
+      mode: 'file',
       featureCount: data.features?.length ?? null,
     });
     return { data, isSample: false };

@@ -22,7 +22,7 @@ function sampleResult(elapsed: () => number): SearchIndexResult {
     parseMs: 0,
     postProcessMs: null,
     totalMs: elapsed(),
-    isSample: true,
+    mode: 'sample',
     featureCount: SAMPLE_SEARCH_INDEX.length,
   });
   return { index: SAMPLE_SEARCH_INDEX, isSample: true };
@@ -50,7 +50,7 @@ export async function loadSearchIndex(): Promise<SearchIndexResult> {
       parseMs,
       postProcessMs: null,
       totalMs: elapsed(),
-      isSample: false,
+      mode: 'file',
       featureCount: Array.isArray(index) ? index.length : null,
     });
     return { index, isSample: false };
