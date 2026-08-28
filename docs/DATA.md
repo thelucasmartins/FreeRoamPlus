@@ -556,6 +556,22 @@ version of this document recommended `tippecanoe`; that is a fine tool but
 is not installed here, and `ogr2ogr` is what these files were actually built
 with:
 
+> **GDAL is installed but not on `PATH`.** It lives in
+> `D:\FreeRoam-lidar-env\Library\bin`, which is why `ogr2ogr`, `ogrinfo` and
+> `sqlite3` all appear to be missing. Prepend that directory and you have all
+> three without installing anything:
+>
+> ```bash
+> export PATH="/d/FreeRoam-lidar-env/Library/bin:$PATH"   # bash
+> $env:PATH = "D:\FreeRoam-lidar-env\Library\bin;$env:PATH"  # PowerShell
+> ```
+>
+> Worth knowing before you conclude a tool is unavailable and work around it:
+> `ogrinfo` and `sqlite3` are the only practical way to check what's actually
+> inside an MBTiles file — layer names, zoom range, feature counts — which is
+> how you tell "the tiles are empty" apart from "the VectorSource is
+> misconfigured". Those two look identical on screen.
+
 ```bash
 ogr2ogr -f MVT data/.staging/parcels.mbtiles data/overlays/parcels.geojson \
   -nln parcels -dsco MINZOOM=10 -dsco MAXZOOM=16
