@@ -36,8 +36,43 @@ export interface OverlayLoadMetric {
 
 const metrics = new Map<string, OverlayLoadMetric>();
 
+type MetricListener = (metric: OverlayLoadMetric) => void;
+const listeners = new Set<MetricListener>();
+
+/**
+ * Observe measurements as they're recorded. Returns an unsubscribe function.
+ *
+ * This exists so persistence can live in src/offline/ (where all document-dir
+ * I/O belongs) without this module importing it — which would be a cycle,
+ * since the persistence layer reads the metrics from here.
+ */
+export function subscribeToMetrics(listener: MetricListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function recordLoadMetric(metric: Omit<OverlayLoadMetric, 'measuredAt'>): void {
-  metrics.set(metric.id, { ...metric, measuredAt: Date.now() });
+  const recorded: OverlayLoadMetric = { ...metric, measuredAt: Date.now() };
+  metrics.set(metric.id, recorded);
+
+  // Echo to the console in development. docs/DEVICE-VERIFICATION.md step 2
+  // tells the operator to read these numbers off the Metro console during
+  // the device pass, so they have to actually appear there. Persisted
+  // separately — see src/offline/metricsLog.ts.
+  if (__DEV__) {
+    console.log(formatLoadMetric(recorded));
+  }
+
+  for (const listener of listeners) {
+    try {
+      listener(recorded);
+    } catch {
+      // A failing observer must never break the load that produced the
+      // measurement. Diagnostics are strictly a side effect here.
+    }
+  }
 }
 
 export function getLoadMetric(id: string): OverlayLoadMetric | null {
@@ -54,10 +89,19 @@ export function startTimer(): () => number {
   return () => Date.now() - t0;
 }
 
-/** One-line summary per overlay, for logging or a debug panel. */
+/**
+ * One-line summary per overlay, for the Metro console or a debug panel.
+ *
+ * Shape is fixed by docs/DEVICE-VERIFICATION.md, which tells the operator
+ * what to look for during the device pass:
+ *
+ *   roads [file]: 47.0MB — parse 3120ms, classify 890ms, 119071 features
+ *   structures [tiles]: 38.9MB — parse 0ms
+ */
 export function formatLoadMetric(m: OverlayLoadMetric): string {
   const size = m.fileSizeBytes === null ? m.mode : `${(m.fileSizeBytes / (1024 * 1024)).toFixed(1)}MB`;
-  const post = m.postProcessMs === null ? '' : ` +${m.postProcessMs}ms post`;
-  const count = m.featureCount === null ? '' : ` (${m.featureCount} features)`;
-  return `${m.id} [${m.mode}]: ${size}${count} — ${m.parseMs}ms parse${post}, ${m.totalMs}ms total`;
+  const parts = [`parse ${m.parseMs}ms`];
+  if (m.postProcessMs !== null) parts.push(`classify ${m.postProcessMs}ms`);
+  if (m.featureCount !== null) parts.push(`${m.featureCount} features`);
+  return `${m.id} [${m.mode}]: ${size} — ${parts.join(', ')}`;
 }

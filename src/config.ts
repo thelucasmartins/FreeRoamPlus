@@ -173,3 +173,15 @@ export const PARCELS_MBTILES_DOWNLOAD_URL = 'http://10.0.0.150:8080/parcels.mbti
  */
 export const STRUCTURES_SOURCE_LAYER = 'structures';
 export const PARCELS_SOURCE_LAYER = 'parcels';
+
+/** Directory (under the app's document dir) for diagnostic output — not user data, not pipeline output. */
+export const DIAGNOSTICS_DIR_NAME = 'diagnostics';
+
+/**
+ * Filename of the persisted overlay load-timing log (spec §9).
+ *
+ * The on-device run is the only source of real load numbers this project
+ * has, and without this they exist only in the Metro console for as long as
+ * someone is watching it. See src/offline/metricsLog.ts.
+ */
+export const LOAD_METRICS_FILENAME = 'load-metrics.json';
