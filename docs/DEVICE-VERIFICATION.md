@@ -31,7 +31,8 @@ Tap **Test connection only (18KB)** on the setup screen.
 This downloads `dem.json` alone, and it is deliberately first: it exercises
 the entire delivery mechanism — URL resolution, Windows Firewall, the
 disk-space preflight, the stall timeout, the atomic write, and the store's
-read path — in about a second, before committing to a 220MB transfer.
+read path — in about a second, before committing to a multi-hundred-megabyte
+transfer.
 
 - **Passes** → the whole transfer path works. Everything after this is
   about data volume, not plumbing.
@@ -40,9 +41,16 @@ read path — in about a second, before committing to a 220MB transfer.
   space" is the preflight doing its job; "Download stalled" means the
   server is reachable but not delivering.
 
-## Step 2 — Real overlay data (~220MB)
+## Step 2 — Real overlay data
 
 Tap **Download overlay data**.
+
+Budget roughly **150MB** for what a tiles-equipped device actually needs
+(roads, search index, DEM), or ~310MB if you pull everything including the
+GeoJSON sources. See `docs/DATA.md` §2 for the split — the short version is
+that `structures.geojson` and `parcels.geojson` are *unnecessary* once the
+tile databases are installed, since the stores resolve tiles-first and
+never read them.
 
 Expect several minutes. Per-file progress is shown; failures are reported
 per file and do not abort the rest.
