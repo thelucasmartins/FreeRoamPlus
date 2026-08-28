@@ -46,6 +46,19 @@ const OVERLAYS: Record<OverlayId, OverlayDescriptor> = {
   dem: { label: 'Elevation grid', filename: DEM_FILENAME, url: DEM_DOWNLOAD_URL },
 };
 
+/**
+ * All five overlay data files.
+ *
+ * SEQUENCING TRAP — revisit this list when the structures and parcels
+ * VectorSource migration lands. Once those two render from
+ * structures.mbtiles / parcels.mbtiles, downloading their GeoJSON is ~160MB
+ * of dead weight, and worse: the stores read the on-device file whenever it
+ * is present, so a device that has both would still take the ~102MB
+ * structures parse this migration exists to eliminate. The fix at that point
+ * is to drop 'structures' and 'parcels' from the default download set, but
+ * it has to happen in step with the rendering change — doing it earlier
+ * would leave those layers with nothing to draw.
+ */
 export const OVERLAY_IDS = Object.keys(OVERLAYS) as OverlayId[];
 
 export function overlayLabel(id: OverlayId): string {
