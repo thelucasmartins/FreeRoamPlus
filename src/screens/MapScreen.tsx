@@ -30,6 +30,7 @@ import {
   getSatelliteStatus,
 } from '../offline/baseLayerTiles';
 import type { ParcelFeatureCollection, ParcelProperties } from '../overlays/parcelTypes';
+import { isSampleSource, type OverlaySource } from '../overlays/overlaySource';
 import { loadParcels } from '../overlays/parcelsStore';
 import { loadRoads } from '../overlays/roadsStore';
 import type { ClassifiedRoadFeatureCollection } from '../overlays/roadTypes';
@@ -70,14 +71,14 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
   const currentPosition = useCurrentPosition({ enabled: locationStatus === 'granted' });
   const [following, setFollowing] = useState(false);
 
-  const [structures, setStructures] = useState<StructureFeatureCollection | null>(null);
-  const [structuresIsSample, setStructuresIsSample] = useState(false);
+  const [structuresSource, setStructuresSource] =
+    useState<OverlaySource<StructureFeatureCollection> | null>(null);
   const [structuresVisible, setStructuresVisible] = useState(true);
   const [roads, setRoads] = useState<ClassifiedRoadFeatureCollection | null>(null);
   const [roadsIsSample, setRoadsIsSample] = useState(false);
   const [roadsVisible, setRoadsVisible] = useState(true);
-  const [parcels, setParcels] = useState<ParcelFeatureCollection | null>(null);
-  const [parcelsIsSample, setParcelsIsSample] = useState(false);
+  const [parcelsSource, setParcelsSource] =
+    useState<OverlaySource<ParcelFeatureCollection> | null>(null);
   const [parcelsVisible, setParcelsVisible] = useState(true);
   const [selectedParcel, setSelectedParcel] = useState<ParcelProperties | null>(null);
   const [searchIndexData, setSearchIndexData] = useState<SearchIndex>([]);
@@ -110,18 +111,17 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
   const cameraRef = useRef<CameraRef>(null);
 
   useEffect(() => {
-    loadStructures().then(({ data, isSample }) => {
-      setStructures(data);
-      setStructuresIsSample(isSample);
-    });
+    // Structures and parcels return a discriminated OverlaySource rather than
+    // a payload: when vector tiles are on the device the store resolves to
+    // `tiles` WITHOUT reading the GeoJSON at all, which is the entire point
+    // of the migration (see src/overlays/overlaySource.ts). Roads and search
+    // have no tiles path and keep their original shape.
+    loadStructures().then(setStructuresSource);
     loadRoads().then(({ data, isSample }) => {
       setRoads(data);
       setRoadsIsSample(isSample);
     });
-    loadParcels().then(({ data, isSample }) => {
-      setParcels(data);
-      setParcelsIsSample(isSample);
-    });
+    loadParcels().then(setParcelsSource);
     loadSearchIndex().then(({ index, isSample }) => {
       setSearchIndexData(index);
       setSearchIndexIsSample(isSample);
@@ -364,12 +364,12 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
           zoom={following ? FOLLOW_ZOOM : undefined}
           onTrackUserLocationChange={handleTrackUserLocationChange}
         />
-        {parcelsVisible && parcels && (
-          <ParcelsOverlay data={parcels} onSelect={handleSelectParcel} />
+        {parcelsVisible && parcelsSource && (
+          <ParcelsOverlay source={parcelsSource} onSelect={handleSelectParcel} />
         )}
         {roadsVisible && roads && <RoadsOverlay data={roads} glyphsUrl={glyphsUrl} />}
-        {structuresVisible && structures && (
-          <StructuresOverlay data={structures} glyphsUrl={glyphsUrl} />
+        {structuresVisible && structuresSource && (
+          <StructuresOverlay source={structuresSource} glyphsUrl={glyphsUrl} />
         )}
         {breadcrumbPoints.length >= 2 && <BreadcrumbOverlay points={breadcrumbPoints} />}
         {waypoints.length > 0 && (
@@ -388,13 +388,13 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
       <LayersPanel
         structuresVisible={structuresVisible}
         onToggleStructures={setStructuresVisible}
-        structuresIsSample={structuresIsSample}
+        structuresIsSample={structuresSource !== null && isSampleSource(structuresSource)}
         roadsVisible={roadsVisible}
         onToggleRoads={setRoadsVisible}
         roadsIsSample={roadsIsSample}
         parcelsVisible={parcelsVisible}
         onToggleParcels={setParcelsVisible}
-        parcelsIsSample={parcelsIsSample}
+        parcelsIsSample={parcelsSource !== null && isSampleSource(parcelsSource)}
       />
       <BaseLayerSelector
         active={baseLayer}

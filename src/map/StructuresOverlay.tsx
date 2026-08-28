@@ -1,13 +1,15 @@
 import {
   GeoJSONSource,
   Layer,
+  VectorSource,
   type FilterSpecification,
 } from '@maplibre/maplibre-react-native';
 
+import type { OverlaySource } from '../overlays/overlaySource';
 import type { StructureFeatureCollection } from '../overlays/types';
 
 interface StructuresOverlayProps {
-  data: StructureFeatureCollection;
+  source: OverlaySource<StructureFeatureCollection>;
   /** file:// glyph template; label layer is omitted entirely when absent. */
   glyphsUrl: string | null;
 }
@@ -29,13 +31,21 @@ const DOCUMENTED_NAMED_FILTER: FilterSpecification = [
  * dashed outline so they visually stand out. Only documented structures with
  * a `name` are labeled — undocumented ones never carry identifying info.
  */
-export function StructuresOverlay({ data, glyphsUrl }: StructuresOverlayProps) {
-  return (
-    <GeoJSONSource id={SOURCE_ID} data={data}>
+export function StructuresOverlay({ source, glyphsUrl }: StructuresOverlayProps) {
+  // Vector-tile layers must name the layer inside the tile; GeoJSON layers
+  // must not. Note the key is the hyphenated `source-layer` from the style
+  // spec — the camelCase form only exists on a deprecated prop path and
+  // silently won't apply here.
+  const sourceLayerProp: { 'source-layer'?: string } =
+    source.mode === 'tiles' ? { 'source-layer': source.sourceLayer } : {};
+
+  const layers = (
+    <>
       <Layer
         id="structures-documented-fill"
         type="fill"
         source={SOURCE_ID}
+        {...sourceLayerProp}
         filter={DOCUMENTED_FILTER}
         minzoom={11}
         paint={{
@@ -48,6 +58,7 @@ export function StructuresOverlay({ data, glyphsUrl }: StructuresOverlayProps) {
         id="structures-undocumented-fill"
         type="fill"
         source={SOURCE_ID}
+        {...sourceLayerProp}
         filter={UNDOCUMENTED_FILTER}
         minzoom={11}
         paint={{
@@ -59,6 +70,7 @@ export function StructuresOverlay({ data, glyphsUrl }: StructuresOverlayProps) {
         id="structures-undocumented-outline"
         type="line"
         source={SOURCE_ID}
+        {...sourceLayerProp}
         filter={UNDOCUMENTED_FILTER}
         minzoom={11}
         paint={{
@@ -72,6 +84,7 @@ export function StructuresOverlay({ data, glyphsUrl }: StructuresOverlayProps) {
           id="structures-documented-label"
           type="symbol"
           source={SOURCE_ID}
+          {...sourceLayerProp}
           filter={DOCUMENTED_NAMED_FILTER}
           minzoom={14}
           layout={{
@@ -86,6 +99,24 @@ export function StructuresOverlay({ data, glyphsUrl }: StructuresOverlayProps) {
           }}
         />
       )}
+    </>
+  );
+
+  // Same layers either way — only the source differs. Vector tiles stream by
+  // viewport (no parse); GeoJSON holds the whole collection in memory, which
+  // is fine for the bundled sample but is exactly what the tiles path exists
+  // to avoid for the real ~102MB dataset.
+  if (source.mode === 'tiles') {
+    return (
+      <VectorSource id={SOURCE_ID} url={source.tileUrl}>
+        {layers}
+      </VectorSource>
+    );
+  }
+
+  return (
+    <GeoJSONSource id={SOURCE_ID} data={source.data}>
+      {layers}
     </GeoJSONSource>
   );
 }

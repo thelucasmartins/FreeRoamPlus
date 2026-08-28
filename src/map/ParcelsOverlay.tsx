@@ -1,15 +1,17 @@
 import {
   GeoJSONSource,
   Layer,
+  VectorSource,
   type FilterSpecification,
   type PressEventWithFeatures,
 } from '@maplibre/maplibre-react-native';
 import type { NativeSyntheticEvent } from 'react-native';
 
+import type { OverlaySource } from '../overlays/overlaySource';
 import type { ParcelFeatureCollection, ParcelProperties } from '../overlays/parcelTypes';
 
 interface ParcelsOverlayProps {
-  data: ParcelFeatureCollection;
+  source: OverlaySource<ParcelFeatureCollection>;
   onSelect: (parcel: ParcelProperties) => void;
 }
 
@@ -20,11 +22,16 @@ const STANDARD_FILTER: FilterSpecification = ['==', ['get', 'resourceExtraction'
 
 /**
  * Parcel boundaries (spec §4): rendered under roads/structures since they're
- * ground-level property lines, not features on top of the terrain. Kept as
- * a plain GeoJSONSource at a fairly high minzoom to bound how much renders
- * at once — see docs/DATA.md for why that matters here specifically (spec
- * §10: this overlay previously failed to load/render reliably) and the
- * vector-tile path to take once a full-county export exists.
+ * ground-level property lines, not features on top of the terrain.
+ *
+ * Renders from vector tiles when a parcels MBTiles is on the device, and
+ * from GeoJSON otherwise. That distinction is the fix for spec §10's
+ * "previously failed to load/render reliably" — the full-county export is
+ * ~58MB of GeoJSON, and parsing it into a single source is what stalls the
+ * device (docs/DATA.md §6). Tap-to-inspect survives the switch: both source
+ * types extend the same PressableSourceProps, so `onPress` and its event
+ * shape are identical — verified against the installed
+ * @maplibre/maplibre-react-native types, not assumed.
  *
  * Resource-extraction parcels (timber/mining/milling, spec §4) get a bolder
  * fill and dashed outline so they stand out; regular parcels stay subtle so
@@ -32,7 +39,7 @@ const STANDARD_FILTER: FilterSpecification = ['==', ['get', 'resourceExtraction'
  * Tapping either kind reports its properties via onSelect — never owner
  * identity, which isn't part of this schema at all.
  */
-export function ParcelsOverlay({ data, onSelect }: ParcelsOverlayProps) {
+export function ParcelsOverlay({ source, onSelect }: ParcelsOverlayProps) {
   const handlePress = (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
     const feature = event.nativeEvent.features[0];
     if (!feature) return;
@@ -40,12 +47,18 @@ export function ParcelsOverlay({ data, onSelect }: ParcelsOverlayProps) {
     onSelect(feature.properties as ParcelProperties);
   };
 
-  return (
-    <GeoJSONSource id={SOURCE_ID} data={data} onPress={handlePress}>
+  // Hyphenated `source-layer` per the style spec — the camelCase form only
+  // exists on a deprecated prop path and would silently not apply.
+  const sourceLayerProp: { 'source-layer'?: string } =
+    source.mode === 'tiles' ? { 'source-layer': source.sourceLayer } : {};
+
+  const layers = (
+    <>
       <Layer
         id="parcels-standard-fill"
         type="fill"
         source={SOURCE_ID}
+        {...sourceLayerProp}
         filter={STANDARD_FILTER}
         minzoom={13}
         paint={{
@@ -58,6 +71,7 @@ export function ParcelsOverlay({ data, onSelect }: ParcelsOverlayProps) {
         id="parcels-resource-extraction-fill"
         type="fill"
         source={SOURCE_ID}
+        {...sourceLayerProp}
         filter={RESOURCE_EXTRACTION_FILTER}
         minzoom={13}
         paint={{
@@ -69,6 +83,7 @@ export function ParcelsOverlay({ data, onSelect }: ParcelsOverlayProps) {
         id="parcels-resource-extraction-outline"
         type="line"
         source={SOURCE_ID}
+        {...sourceLayerProp}
         filter={RESOURCE_EXTRACTION_FILTER}
         minzoom={13}
         paint={{
@@ -77,6 +92,20 @@ export function ParcelsOverlay({ data, onSelect }: ParcelsOverlayProps) {
           'line-dasharray': [3, 1.5],
         }}
       />
+    </>
+  );
+
+  if (source.mode === 'tiles') {
+    return (
+      <VectorSource id={SOURCE_ID} url={source.tileUrl} onPress={handlePress}>
+        {layers}
+      </VectorSource>
+    );
+  }
+
+  return (
+    <GeoJSONSource id={SOURCE_ID} data={source.data} onPress={handlePress}>
+      {layers}
     </GeoJSONSource>
   );
 }
