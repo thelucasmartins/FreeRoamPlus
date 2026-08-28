@@ -112,24 +112,43 @@ Then set `TILE_DOWNLOAD_URL` in [src/config.ts](../src/config.ts) to
 `http://<your-desktop-LAN-IP>:8080/sonoma.mbtiles` and tap **Download tiles**
 in the app. After that one download, the map is fully offline.
 
-### The overlay data files
+### What actually gets downloaded
 
-The tile database above is only the basemap. The five overlay files are
-delivered the same way, over the same server, but they are **separate
-downloads** into `<app documents>/overlays/`:
+There are **two** kinds of download, into two different directories, and the
+app treats them differently.
+
+**Tile databases** → `<app documents>/tiles/`, served from the root of
+`data/`:
+
+| File | Size | Source layer | Rendered by |
+| --- | --- | --- | --- |
+| `sonoma.mbtiles` | tens of MB | (OpenMapTiles schema, §1) | the basemap style |
+| `structures.mbtiles` | ~44MB | `structures` | `StructuresOverlay` (§4) |
+| `parcels.mbtiles` | ~44MB | `parcels` | `ParcelsOverlay` (§6) |
+
+**Overlay data files** → `<app documents>/overlays/`, served from
+`data/overlays/`:
 
 | File | Size | Consumed by |
 | --- | --- | --- |
-| `structures.geojson` | ~102MB | `structuresStore.ts` (moving to vector tiles — see §4) |
-| `parcels.geojson` | ~58MB | `parcelsStore.ts` (moving to vector tiles — see §6) |
 | `roads.geojson` | ~47MB | `roadsStore.ts` — render **and** the routing graph (§7) |
 | `search-index.json` | ~12MB | `searchStore.ts` |
 | `dem.json` | ~18KB | elevation/grade (§9) |
+| `structures.geojson` | ~102MB | only the *source* the tiles are built from — see below |
+| `parcels.geojson` | ~58MB | only the *source* the tiles are built from — see below |
+
+**You do not need `structures.geojson` or `parcels.geojson` on the device
+once the tile databases are installed**, and putting them there is actively
+counterproductive. The stores resolve tiles-first (§6), so with the tiles
+present those files are never read — they are 160MB occupying storage to no
+effect. They remain in the download set only as the fallback for a device
+that has no tiles yet, and they stay in `data/` regardless because they are
+what the tile builds consume.
 
 Note the serving layout: `npx serve --cors -l 8080 data` makes `data/` the
-web root, so the MBTiles databases sit at the root
-(`http://<ip>:8080/sonoma.mbtiles`) while the overlays are one segment down
-(`http://<ip>:8080/overlays/roads.geojson`). `OVERLAY_DOWNLOAD_BASE_URL` in
+web root, which is why the two kinds resolve differently —
+`http://<ip>:8080/structures.mbtiles` versus
+`http://<ip>:8080/overlays/roads.geojson`. `OVERLAY_DOWNLOAD_BASE_URL` in
 [src/config.ts](../src/config.ts) encodes that difference — keep its host in
 sync with `TILE_DOWNLOAD_URL`.
 
@@ -143,10 +162,33 @@ the hardened downloader in
 MBTiles path — disk-space preflight, a 30s stall timeout, atomic
 partial-file handling, and friendly error messages.
 
-Budget roughly **220MB** of free space for the overlays alone, plus the
-basemap. The preflight check refuses a download that would leave under 50MB
-free, so a phone that's nearly full fails fast with a readable message
-rather than part-way through a 100MB transfer.
+Storage to budget on the device, in the order you'd install it:
+
+| | Size |
+| --- | --- |
+| Basemap `sonoma.mbtiles` | tens of MB |
+| Both overlay tile databases | ~88MB |
+| `roads` + `search-index` + `dem` | ~59MB |
+| *Optional, and unnecessary once tiles are installed:* `structures.geojson` + `parcels.geojson` | ~160MB |
+
+So a device with tiles needs roughly **150MB plus the basemap**, not the
+~220MB an earlier version of this document quoted — that figure predated the
+tile databases and assumed every overlay arrived as GeoJSON. Pulling
+everything, including the two redundant GeoJSON files, is closer to 310MB.
+
+The preflight check refuses a download that would leave under 50MB free, so
+a phone that's nearly full fails fast with a readable message rather than
+part-way through a 100MB transfer.
+
+Each store also records what its load actually cost — file size, parse time,
+and for roads the classification time separately — and those measurements
+are persisted to `<app documents>/diagnostics/load-metrics.json` so they
+survive the app closing. See
+[src/offline/metricsLog.ts](../src/offline/metricsLog.ts); the analysis that
+reads them is in
+[src/overlays/loadMetricsReport.ts](../src/overlays/loadMetricsReport.ts).
+This is the only source of real load numbers the project has, since none of
+it can be measured meaningfully on a desktop.
 
 ### Verifying the LAN transfer before you touch the phone
 
@@ -485,6 +527,23 @@ with:
 ogr2ogr -f MVT data/.staging/parcels.mbtiles data/overlays/parcels.geojson \
   -nln parcels -dsco MINZOOM=10 -dsco MAXZOOM=16
 ```
+
+**Verified output of the real builds**, for comparison if you ever rebuild
+these:
+
+| | Size | Source layer | Zoom | Tile-features | Distinct features |
+| --- | --- | --- | --- | --- | --- |
+| `structures.mbtiles` | 45,834,240 B | `structures` | 10–16 | 371,942 | 323,040 |
+| `parcels.mbtiles` | 45,154,304 B | `parcels` | 10–16 | 293,582 | 188,492 |
+
+**`ogrinfo` reports features per tile, not distinct features, and the two
+numbers do not match.** A polygon crossing a tile boundary is counted once
+in every tile it touches, so the tile-feature count is always the larger.
+The ratios above (~1.15x for structures, ~1.56x for parcels) are normal and
+expected — parcels duplicate more because they are larger polygons and so
+straddle more tile edges. A count exceeding the source's feature count is
+*not* evidence of duplicated or corrupted geometry, and it is an easy thing
+to misread as one. The distinct counts come from the source GeoJSON.
 
 **Expect this warning on dense data, and do not treat it as a failure:**
 
