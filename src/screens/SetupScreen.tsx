@@ -9,16 +9,19 @@ import {
 
 import { TILE_DOWNLOAD_URL } from '../config';
 import {
+  deleteOverlay,
   downloadOverlays,
   overlayLabel,
+  OVERLAY_IDS,
   type OverlayId,
 } from '../offline/overlayFiles';
 import {
+  deleteOverlayTiles,
   downloadOverlayTiles,
   overlayTileLabel,
   OVERLAY_TILE_IDS,
 } from '../offline/overlayTiles';
-import { downloadTiles, type TileStoreStatus } from '../offline/tileStore';
+import { deleteTiles, downloadTiles, type TileStoreStatus } from '../offline/tileStore';
 
 interface SetupScreenProps {
   onTilesReady: (status: TileStoreStatus) => void;
@@ -38,6 +41,8 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
   const [tilesBusy, setTilesBusy] = useState(false);
   const [tileProgress, setTileProgress] = useState<string | null>(null);
   const [tileResult, setTileResult] = useState<string | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetResult, setResetResult] = useState<string | null>(null);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -136,6 +141,39 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
     );
   };
 
+  /**
+   * Clears every downloaded file so a bad one can be replaced.
+   *
+   * This is the recovery path for the failure no guard can catch. The size
+   * floor in tileSets.ts rejects a truncated database, but nothing can
+   * distinguish a *partial large* tile set from a complete smaller one by
+   * size alone — so a build aborted late lands looking healthy, and the
+   * stores resolve tiles-first and never fall back to the GeoJSON that
+   * would have saved them. Without a reset the device is simply stuck
+   * rendering a partial county with no error anywhere.
+   *
+   * Deleting is safe by construction: every store falls back to its
+   * GeoJSON and then to bundled sample data, so the worst case after a
+   * reset is the app as it shipped.
+   */
+  const handleResetDownloads = async () => {
+    setResetBusy(true);
+    setResetResult(null);
+    try {
+      OVERLAY_TILE_IDS.forEach(deleteOverlayTiles);
+      OVERLAY_IDS.forEach(deleteOverlay);
+      deleteTiles();
+      setOverlayResult(null);
+      setTileResult(null);
+      setError(null);
+      setResetResult('All downloaded data removed. Download again to retry.');
+    } catch (e) {
+      setResetResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>FreeRoam+</Text>
@@ -209,6 +247,21 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
       )}
 
       {tileResult && <Text style={styles.body}>{tileResult}</Text>}
+
+      {/* Recovery path. A tile database that is bad but plausibly sized
+          passes every guard and is never fallen back from — this is the
+          only way out of that state from inside the app. */}
+      <Pressable
+        style={styles.secondaryButton}
+        onPress={handleResetDownloads}
+        disabled={resetBusy || downloading || overlayBusy || tilesBusy}
+      >
+        <Text style={styles.secondaryButtonText}>
+          {resetBusy ? 'Removing…' : 'Reset all downloaded data'}
+        </Text>
+      </Pressable>
+
+      {resetResult && <Text style={styles.body}>{resetResult}</Text>}
 
       <Pressable style={styles.secondaryButton} onPress={onUseOnlineFallback}>
         <Text style={styles.secondaryButtonText}>
