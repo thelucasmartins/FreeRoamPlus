@@ -27,14 +27,14 @@ County bounding box:
 
 ```bash
 curl -L -o planetiler.jar https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar
-java -Xmx2g -jar planetiler.jar --download --area=norcal --bounds=-123.65,38.05,-122.30,38.90 --output='data\sonoma.mbtiles'
+java -Xmx1500m -jar planetiler.jar --download --area=norcal --bounds=-123.65,38.05,-122.30,38.90 --output='data\sonoma.mbtiles'
 ```
 
 **Everything below was learned by running this command, not by reading the
 Planetiler docs.** Three separate errors lived in this section until a
-two-minute smoke test on a tiny bbox surfaced them. Run a smoke test before
-any real build; each of these fails only at launch or worse, and a
-county-scale run is hours long.
+smoke test on a tiny bbox surfaced them. Run a smoke test before any real
+build — each of these fails only at launch, so you discover them after
+committing the machine rather than before.
 
 - **`--output` must use backslashes on Windows.** Planetiler parses it as a
   URI, so `--output=D:/path/x.mbtiles` reads `D:` as a URL scheme and aborts
@@ -77,9 +77,19 @@ county-scale run is hours long.
   leaves ~200MB free as the *steady state* of a healthy run, which no
   sustained-breach rule can distinguish from distress.
 
-  `-Xmx2g` is the right default: peak live is ~1.2GB, so 1500m runs at 82%
-  utilisation with thin headroom, and `-Xmx` is a ceiling rather than a
-  reservation — an unused 2g costs nothing.
+  **`-Xmx1500m` is what actually completed this build**, and the figures
+  above are from that run. An earlier attempt at `-Xmx2g` was killed by a
+  memory guard, on the reasoning that "`-Xmx` is a ceiling, not a
+  reservation, so an unused 2g costs nothing." That reasoning is true of
+  the *heap* and false of *RSS*: a larger ceiling lets the JVM defer
+  collection and grow its resident set, consuming the very free memory the
+  guard was watching. Size the heap against what the machine can hold
+  including the ~460MB of non-heap overhead, not against what the heap
+  alone would use.
+
+  On a machine with several GB to spare, `-Xmx2g` is fine and gives more
+  headroom. On a constrained one, 1500m is proven sufficient for a
+  county-scale extract.
 
   **The peak is bounds-independent, which is the counter-intuitive part.**
   `--bounds` clips the *output tiles*; it does not clip input parsing.
@@ -96,8 +106,15 @@ county-scale run is hours long.
   Pin `--tmpdir` to a drive with room, and verify from Planetiler's own
   startup log which tmpdir it actually used rather than assuming the flag
   took.
-- `--bounds` clips to Sonoma County so the output stays small (roughly tens of
-  MB rather than GB).
+- `--bounds` clips to Sonoma County so the output stays small — **23MB
+  measured**, not the "tens of MB" this document used to estimate. That
+  distinction matters: a size threshold set from the prose figure rather
+  than the measured one was calibrated at 20MB and the real artifact
+  cleared it by only 15%. A slightly narrower bbox or lower maxzoom would
+  have been rejected as an empty database, and the basemap is the one
+  artifact with no fallback — rejecting a valid one leaves no map at all.
+  Thresholds set from prose are guesses wearing a number; set them from
+  measurements and record the measurement.
 - Output uses the OpenMapTiles schema, which is what `src/map/style.ts`
   expects. The complete list of source layers the style actually consumes
   today, verified by grepping `source-layer` in that file, is:
