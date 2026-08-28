@@ -13,6 +13,11 @@ import {
   overlayLabel,
   type OverlayId,
 } from '../offline/overlayFiles';
+import {
+  downloadOverlayTiles,
+  overlayTileLabel,
+  OVERLAY_TILE_IDS,
+} from '../offline/overlayTiles';
 import { downloadTiles, type TileStoreStatus } from '../offline/tileStore';
 
 interface SetupScreenProps {
@@ -30,6 +35,9 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
   const [overlayBusy, setOverlayBusy] = useState(false);
   const [overlayProgress, setOverlayProgress] = useState<string | null>(null);
   const [overlayResult, setOverlayResult] = useState<string | null>(null);
+  const [tilesBusy, setTilesBusy] = useState(false);
+  const [tileProgress, setTileProgress] = useState<string | null>(null);
+  const [tileResult, setTileResult] = useState<string | null>(null);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -77,6 +85,54 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
         : `${okCount}/${outcomes.length} installed — ${failed
             .map((f) => `${f.label}: ${f.error}`)
             .join('; ')}`,
+    );
+  };
+
+  /**
+   * Vector tiles for the two large overlays. Separate from the GeoJSON
+   * download above because they replace it rather than supplement it: once
+   * a tile database is on-device the store resolves to it and never reads
+   * the corresponding .geojson, which is the point of the migration — the
+   * county-scale structures file is ~102MB and parsing it stalls the map.
+   *
+   * Failures here are non-fatal by design. Each store falls back to the
+   * GeoJSON, and then to bundled samples, so a device that can't fetch
+   * tiles still renders.
+   */
+  const runTileDownload = async () => {
+    setTilesBusy(true);
+    setTileResult(null);
+    const failures: string[] = [];
+    let installed = 0;
+
+    for (const id of OVERLAY_TILE_IDS) {
+      setTileProgress(overlayTileLabel(id));
+      try {
+        const status = await downloadOverlayTiles(id, (info) => {
+          const pct =
+            info.totalBytes && info.totalBytes > 0
+              ? ` ${Math.round((info.bytesWritten / info.totalBytes) * 100)}%`
+              : '';
+          setTileProgress(`${overlayTileLabel(id)}${pct}`);
+        });
+        if (status.ready) {
+          installed += 1;
+        } else {
+          // Reachable when the file arrives but fails the plausibility
+          // floor — e.g. a build still in progress on the desktop.
+          failures.push(`${overlayTileLabel(id)}: incomplete database`);
+        }
+      } catch (e) {
+        failures.push(`${overlayTileLabel(id)}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    setTileProgress(null);
+    setTilesBusy(false);
+    setTileResult(
+      failures.length === 0
+        ? `${installed}/${OVERLAY_TILE_IDS.length} tile sets installed.`
+        : `${installed}/${OVERLAY_TILE_IDS.length} installed — ${failures.join('; ')}`,
     );
   };
 
@@ -138,6 +194,21 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
       )}
 
       {overlayResult && <Text style={styles.body}>{overlayResult}</Text>}
+
+      {tilesBusy ? (
+        <View style={styles.progressRow}>
+          <ActivityIndicator color="#4a6b3a" />
+          <Text style={styles.progressText}>{tileProgress ?? 'Working…'}</Text>
+        </View>
+      ) : (
+        <Pressable style={styles.secondaryButton} onPress={runTileDownload}>
+          <Text style={styles.secondaryButtonText}>
+            Download structures &amp; parcels as vector tiles
+          </Text>
+        </Pressable>
+      )}
+
+      {tileResult && <Text style={styles.body}>{tileResult}</Text>}
 
       <Pressable style={styles.secondaryButton} onPress={onUseOnlineFallback}>
         <Text style={styles.secondaryButtonText}>
