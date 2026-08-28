@@ -22,18 +22,43 @@ scripts covers is still needed).
 
 ## 1. Build `sonoma.mbtiles` with Planetiler
 
-Requires Java 21+. Planetiler downloads the OSM extract for you and clips to
-the Sonoma County bounding box:
+Requires Java 21+. Planetiler downloads its inputs and clips to the Sonoma
+County bounding box:
 
 ```bash
 curl -L -o planetiler.jar https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar
-java -Xmx4g -jar planetiler.jar --download --area=norcal --bounds=-123.65,38.05,-122.30,38.90 --output=data/sonoma.mbtiles
+java -Xmx2g -jar planetiler.jar --download --area=norcal --bounds=-123.65,38.05,-122.30,38.90 --output='data\sonoma.mbtiles'
 ```
 
-- `--area=norcal` pulls the Geofabrik Northern California extract (if the id
-  isn't recognized, download `norcal-latest.osm.pbf` from
-  https://download.geofabrik.de/north-america/us/california.html manually and
-  pass `--osm-path=norcal-latest.osm.pbf` instead of `--download --area=…`).
+**Everything below was learned by running this command, not by reading the
+Planetiler docs.** Three separate errors lived in this section until a
+two-minute smoke test on a tiny bbox surfaced them. Run a smoke test before
+any real build; each of these fails only at launch or worse, and a
+county-scale run is hours long.
+
+- **`--output` must use backslashes on Windows.** Planetiler parses it as a
+  URI, so `--output=D:/path/x.mbtiles` reads `D:` as a URL scheme and aborts
+  with `Unsupported scheme D`. Confusingly, `--tmpdir` and `--osm_path` are
+  *fine* with forward slashes — Planetiler normalizes those — so this looks
+  like a path typo and isn't.
+- **Do not drop `--download`.** The OpenMapTiles profile reads FOUR inputs,
+  not just the OSM extract: `lake_centerline.shp.zip`,
+  `water-polygons-split-3857.zip`, `natural_earth_vector.sqlite.zip`, and
+  the `.osm.pbf`. Passing `--osm_path` alone skips fetching the other three
+  and the run dies at startup. If you already have the extract on disk,
+  keep `--download` and pass `--osm_path` as well — `--download` fetches
+  only what is missing. Use `--download_dir` to keep roughly 1.5GB of
+  auxiliary sources off your system drive.
+  Those three sources are what feed `water`, `waterway`, `landcover`,
+  `park` and `boundary` — five of the seven layers below. A build that
+  somehow skipped them would produce a basemap of roads and buildings over
+  blank ground.
+- **Heap:** `-Xmx4g` was specified here originally and is wrong on a
+  memory-constrained machine. `-Xmx2g` with the default `--storage=mmap`
+  spills to disk instead, which is what that flag is for. On a box with
+  under ~1GB free, drop to `-Xmx1500m` and pin `--tmpdir` to a drive with
+  room; verify from Planetiler's own startup log which tmpdir it actually
+  used rather than assuming the flag took.
 - `--bounds` clips to Sonoma County so the output stays small (roughly tens of
   MB rather than GB).
 - Output uses the OpenMapTiles schema, which is what `src/map/style.ts`
