@@ -453,6 +453,16 @@ so it downloads happily and then renders an empty layer. Build to
 volume is atomic, so the served path never exists in a partial state.
 Anything in `data/.staging/` is by definition incomplete.
 
+This matters more than it sounds, because a partial MBTiles is not detectable
+by inspection. GDAL creates the real file as a valid but empty ~16KB SQLite
+database at startup and only flushes tiles into it at the end, so a file
+fetched mid-build has a correct `SQLite format 3` header, opens fine, and
+contains nothing. The app defends against this with a minimum-size floor
+(`MIN_TILE_DB_BYTES` in [tileSets.ts](../src/offline/tileSets.ts)): an
+undersized database resolves to *not ready*, so the overlay falls back to
+GeoJSON or sample data rather than rendering blank. That is a backstop, not a
+substitute — atomic publishing is what actually prevents the situation.
+
 **Tiles-first resolution — the part that's easy to get wrong.** Putting the
 tiles on the device is only half the fix. The stores previously read the
 on-device GeoJSON whenever it was present, so a device holding *both*
