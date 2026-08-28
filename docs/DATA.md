@@ -37,7 +37,17 @@ java -Xmx4g -jar planetiler.jar --download --area=norcal --bounds=-123.65,38.05,
 - `--bounds` clips to Sonoma County so the output stays small (roughly tens of
   MB rather than GB).
 - Output uses the OpenMapTiles schema, which is what `src/map/style.ts`
-  expects (`transportation`, `building`, `place`, … source layers).
+  expects. The complete list of source layers the style actually consumes
+  today, verified by grepping `source-layer` in that file, is:
+  `boundary`, `building`, `landcover`, `park`, `transportation`, `water`,
+  `waterway`. Verify a generated basemap against **all seven** — a tile set
+  carrying only roads and buildings will render no water, parks, landcover
+  or county boundary, which on an off-road navigation app is a functional
+  gap, not a cosmetic one. Note `place` is deliberately absent: the
+  place/label layers are gated behind an on-device glyph pack that doesn't
+  exist yet (see §3), so nothing consumes it at present. Planetiler's
+  OpenMapTiles profile emits all of these, so no extra flags are needed —
+  this list is for *verification*, not for configuring the build.
 
 ## 2. Get the file onto the phone
 
@@ -53,6 +63,76 @@ npx serve --cors -l 8080 data
 Then set `TILE_DOWNLOAD_URL` in [src/config.ts](../src/config.ts) to
 `http://<your-desktop-LAN-IP>:8080/sonoma.mbtiles` and tap **Download tiles**
 in the app. After that one download, the map is fully offline.
+
+### The overlay data files
+
+The tile database above is only the basemap. The five overlay files are
+delivered the same way, over the same server, but they are **separate
+downloads** into `<app documents>/overlays/`:
+
+| File | Size | Consumed by |
+| --- | --- | --- |
+| `structures.geojson` | ~102MB | `structuresStore.ts` (moving to vector tiles — see §4) |
+| `parcels.geojson` | ~58MB | `parcelsStore.ts` (moving to vector tiles — see §6) |
+| `roads.geojson` | ~47MB | `roadsStore.ts` — render **and** the routing graph (§7) |
+| `search-index.json` | ~12MB | `searchStore.ts` |
+| `dem.json` | ~18KB | elevation/grade (§9) |
+
+Note the serving layout: `npx serve --cors -l 8080 data` makes `data/` the
+web root, so the MBTiles databases sit at the root
+(`http://<ip>:8080/sonoma.mbtiles`) while the overlays are one segment down
+(`http://<ip>:8080/overlays/roads.geojson`). `OVERLAY_DOWNLOAD_BASE_URL` in
+[src/config.ts](../src/config.ts) encodes that difference — keep its host in
+sync with `TILE_DOWNLOAD_URL`.
+
+Each overlay store reads its file from the document dir and falls back to
+bundled sample data when it's absent. That fallback is deliberate and load-
+bearing: it means a missing or half-transferred file degrades to samples
+instead of breaking the map. The transfer itself lives in
+[src/offline/overlayFiles.ts](../src/offline/overlayFiles.ts), which shares
+the hardened downloader in
+[src/offline/fileDownload.ts](../src/offline/fileDownload.ts) with the
+MBTiles path — disk-space preflight, a 30s stall timeout, atomic
+partial-file handling, and friendly error messages.
+
+Budget roughly **220MB** of free space for the overlays alone, plus the
+basemap. The preflight check refuses a download that would leave under 50MB
+free, so a phone that's nearly full fails fast with a readable message
+rather than part-way through a 100MB transfer.
+
+### Verifying the LAN transfer before you touch the phone
+
+Two failure modes account for most "the app won't download" reports, and
+both are checkable from the desktop in a few seconds:
+
+**1. The file isn't served where you think it is.** Check it answers with
+CORS, at the size you expect:
+
+```bash
+curl -sI http://<your-desktop-LAN-IP>:8080/overlays/roads.geojson
+```
+
+Use the **LAN IP, not `localhost`** — serving on `localhost` works fine from
+the desktop and is completely unreachable from the phone.
+
+**2. Windows Firewall.** If the Wi-Fi network is classified `Public`,
+inbound connections are blocked by default and the phone will simply hang.
+Node needs an inbound allow rule covering the interpreter that runs `serve`:
+
+```powershell
+Get-NetConnectionProfile | Select-Object InterfaceAlias, NetworkCategory
+Get-NetFirewallRule -Enabled True -Direction Inbound -Action Allow |
+  Where-Object DisplayName -match 'node'
+```
+
+A program-scoped rule for `node.exe` on the active profile is enough — the
+port itself doesn't need its own rule. If no such rule exists, the phone
+cannot reach the server no matter how correct the URL is.
+
+Finally, the desktop's LAN address is **DHCP-assigned**. If the machine
+reconnects to Wi-Fi and the lease changes, every download URL in
+`src/config.ts` points at the wrong host and downloads fail with a
+connection error. Re-check the IP before blaming the app.
 
 ## 3. Labels (optional for now)
 
