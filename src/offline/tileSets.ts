@@ -1,6 +1,6 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 
-import { TILES_DIR_NAME } from '../config';
+import { MBTILES_FILENAME, TILES_DIR_NAME } from '../config';
 import { downloadFileTo, type DownloadProgressInfo } from './fileDownload';
 
 /** Every SQLite database — and so every MBTiles file — starts with these 16 bytes. */
@@ -17,23 +17,44 @@ const SQLITE_MAGIC = 'SQLite format 3\0';
  * sidecar .temp.db meanwhile. Downloaded mid-build, such a file passes every
  * structural check, reports ready, and renders a blank layer with no error.
  *
- * 1MB is ~64x the empty shell and still an order of magnitude below any real
- * tileset here — the basemap and the county-scale overlays all run to tens of
- * megabytes. Deliberately a round number rather than a tuned one: it is not
- * trying to distinguish a good tileset from a slightly worse one, only a
- * populated database from an essentially empty one.
+ * Floors are per-artifact, because one global number can only be sized for
+ * one failure. 1MB is ~64x an empty shell and right for the overlay tile
+ * sets, but useless for the basemap: a county-scale Planetiler build that
+ * aborts partway — a designed outcome, since the production runner kills the
+ * JVM on sustained low memory or disk — leaves a *hundreds of megabytes*
+ * partial `sonoma.mbtiles` that sails past 1MB, passes the SQLite header
+ * check, and reports ready. On device that renders a partial county with no
+ * error anywhere, which reads as "the basemap works, Sonoma is just sparse
+ * over here".
  *
- * This is a heuristic backstop, not a correctness guarantee. The actual
- * guarantee is that builds publish atomically — built to a staging path and
- * renamed into place only on success — so a partial file never appears at the
- * served path at all. See docs/DATA.md §6.
+ * Deliberately round numbers, not tuned ones: these separate "populated" from
+ * "essentially empty", and make no attempt to judge quality.
  *
- * Note the failure direction if this ever did reject a legitimately tiny
- * tileset: the overlay falls back to its GeoJSON, which for structures means
- * the ~102MB parse the tiles exist to avoid. That's a degradation, not a
- * break, but it's the reason not to raise this threshold casually.
+ * BE CLEAR ABOUT THE LIMIT. A size floor catches a build that died *early*.
+ * It cannot catch one that died late — a basemap abandoned at 80% of a 300MB
+ * build clears any floor that a legitimate small build also clears, and no
+ * choice of number fixes that. This is a backstop for the cheap case, not a
+ * correctness guarantee. The actual guarantee is upstream: builds publish
+ * atomically, staged to a temporary path and renamed into place only on
+ * success, so a partial database never appears at the served path at all.
+ * See docs/DATA.md §6.
+ *
+ * Note the failure direction if a floor ever did reject a legitimate tileset:
+ * the overlay falls back to its GeoJSON, which for structures means the
+ * ~102MB parse the tiles exist to avoid. A degradation rather than a break,
+ * but the reason not to raise these casually.
  */
-const MIN_TILE_DB_BYTES = 1024 * 1024;
+const DEFAULT_MIN_TILE_DB_BYTES = 1024 * 1024;
+
+/** Per-artifact floors for databases whose legitimate size is known to be much larger. */
+const MIN_TILE_DB_BYTES_BY_FILE: Record<string, number> = {
+  // A Sonoma County OpenMapTiles basemap runs to tens of megabytes (docs/DATA.md §1).
+  [MBTILES_FILENAME]: 20 * 1024 * 1024,
+};
+
+function minBytesFor(filename: string): number {
+  return MIN_TILE_DB_BYTES_BY_FILE[filename] ?? DEFAULT_MIN_TILE_DB_BYTES;
+}
 
 export interface TileSetStatus {
   /** True when the MBTiles database exists on-device. */
@@ -76,9 +97,9 @@ function toMbtilesUrl(fileUri: string): string {
  * Existence alone is not evidence of usability. A database can be present,
  * be a structurally valid SQLite file, and still contain no tiles — that is
  * exactly what an in-progress GDAL build looks like on disk (see
- * MIN_TILE_DB_BYTES). Reporting such a file as ready is the worst available
- * outcome: callers switch to the tile path, nothing renders, and no error is
- * raised anywhere.
+ * DEFAULT_MIN_TILE_DB_BYTES). Reporting such a file as ready is the worst
+ * available outcome: callers switch to the tile path, nothing renders, and no
+ * error is raised anywhere.
  *
  * So a suspiciously small database resolves to not-ready, which sends the
  * overlay stores down their GeoJSON/sample fallback instead. A visibly stale
@@ -91,7 +112,7 @@ export function getTileSetStatus(filename: string): TileSetStatus {
   }
 
   const sizeBytes = db.size ?? null;
-  if (sizeBytes !== null && sizeBytes < MIN_TILE_DB_BYTES) {
+  if (sizeBytes !== null && sizeBytes < minBytesFor(filename)) {
     return { ready: false, mbtilesUrl: null, sizeBytes };
   }
 
@@ -152,7 +173,7 @@ function rejectionReason(file: File, filename: string): string | null {
   // Deliberately after the header check, so a genuinely corrupt file gets the
   // more accurate message above rather than being reported as merely small.
   const size = file.size ?? 0;
-  if (size > 0 && size < MIN_TILE_DB_BYTES) {
+  if (size > 0 && size < minBytesFor(filename)) {
     return `Downloaded ${filename} is a valid but empty tile database (${Math.round(size / 1024)}KB) — it was most likely still being generated when it was fetched. Wait for the build to finish and try again.`;
   }
 
