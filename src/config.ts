@@ -115,3 +115,61 @@ export const USER_DATA_DIR_NAME = 'user-data';
 
 /** Filename of the on-device waypoints/pins store (spec §11). */
 export const WAYPOINTS_FILENAME = 'waypoints.json';
+
+/**
+ * Base URL for the overlay data files (spec §8, §9).
+ *
+ * The dev serving pattern is `npx serve --cors -l 8080 data` from the repo
+ * root, which makes data/ the web root — so the overlay files, which live
+ * at data/overlays/, resolve one path segment down from the MBTiles
+ * databases at data/ root. Keep this in sync with TILE_DOWNLOAD_URL's host.
+ *
+ * Note the host is this machine's DHCP-assigned LAN address: if the desktop
+ * reconnects to Wi-Fi and the lease changes, this needs updating. See
+ * docs/DATA.md for the transfer runbook.
+ */
+export const OVERLAY_DOWNLOAD_BASE_URL = 'http://10.0.0.150:8080/overlays';
+
+/** One-time download source for the structures overlay — see OVERLAY_DOWNLOAD_BASE_URL. */
+export const STRUCTURES_DOWNLOAD_URL = `${OVERLAY_DOWNLOAD_BASE_URL}/${STRUCTURES_FILENAME}`;
+
+/** One-time download source for the roads/trails overlay — see OVERLAY_DOWNLOAD_BASE_URL. */
+export const ROADS_DOWNLOAD_URL = `${OVERLAY_DOWNLOAD_BASE_URL}/${ROADS_FILENAME}`;
+
+/** One-time download source for the parcels overlay — see OVERLAY_DOWNLOAD_BASE_URL. */
+export const PARCELS_DOWNLOAD_URL = `${OVERLAY_DOWNLOAD_BASE_URL}/${PARCELS_FILENAME}`;
+
+/** One-time download source for the offline search index — see OVERLAY_DOWNLOAD_BASE_URL. */
+export const SEARCH_INDEX_DOWNLOAD_URL = `${OVERLAY_DOWNLOAD_BASE_URL}/${SEARCH_INDEX_FILENAME}`;
+
+/** One-time download source for the elevation grid — see OVERLAY_DOWNLOAD_BASE_URL. */
+export const DEM_DOWNLOAD_URL = `${OVERLAY_DOWNLOAD_BASE_URL}/${DEM_FILENAME}`;
+
+/**
+ * Vector-tile databases for the two overlays that are too large to ship as
+ * flat GeoJSON (docs/DATA.md §4, §6).
+ *
+ * structures.geojson (~102MB) and parcels.geojson (~58MB) both stall or OOM
+ * the phone when parsed whole into a single GeoJSONSource. Pre-tiled, they
+ * stream by viewport instead. These live at the data/ root alongside
+ * sonoma.mbtiles, not under overlays/, because they're tile databases
+ * rather than raw overlay data — so they use the root download URL shape.
+ */
+export const STRUCTURES_MBTILES_FILENAME = 'structures.mbtiles';
+
+/** One-time download source for the structures vector tiles — see TILE_DOWNLOAD_URL for the dev-serving pattern. */
+export const STRUCTURES_MBTILES_DOWNLOAD_URL = 'http://10.0.0.150:8080/structures.mbtiles';
+
+export const PARCELS_MBTILES_FILENAME = 'parcels.mbtiles';
+
+/** One-time download source for the parcels vector tiles — see TILE_DOWNLOAD_URL for the dev-serving pattern. */
+export const PARCELS_MBTILES_DOWNLOAD_URL = 'http://10.0.0.150:8080/parcels.mbtiles';
+
+/**
+ * Source-layer names inside the two overlay tile databases, set by the
+ * desktop conversion (`ogr2ogr -nln`). A VectorSource layer must reference
+ * these verbatim or it renders nothing, silently — there is no error for
+ * naming a source layer that doesn't exist in the tiles.
+ */
+export const STRUCTURES_SOURCE_LAYER = 'structures';
+export const PARCELS_SOURCE_LAYER = 'parcels';
