@@ -1,6 +1,10 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 
 import { TILES_DIR_NAME } from '../config';
+import { downloadFileTo, type DownloadProgressInfo } from './fileDownload';
+
+/** Every SQLite database — and so every MBTiles file — starts with these 16 bytes. */
+const SQLITE_MAGIC = 'SQLite format 3\0';
 
 export interface TileSetStatus {
   /** True when the MBTiles database exists on-device. */
@@ -11,66 +15,15 @@ export interface TileSetStatus {
   sizeBytes: number | null;
 }
 
-/** Extra headroom required beyond the download's own size, so the device isn't left with zero free space right after. */
-const DISK_SPACE_MARGIN_BYTES = 50 * 1024 * 1024;
-
-/** Download is considered stalled (dead connection, captive portal) rather than just slow if no bytes arrive for this long. */
-const STALL_TIMEOUT_MS = 30000;
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-}
-
-/** Best-effort Content-Length lookup for the preflight storage check — a HEAD failure just skips the check rather than blocking the download. */
-async function fetchContentLength(url: string): Promise<number | null> {
-  try {
-    const res = await fetch(url, { method: 'HEAD' });
-    const header = res.headers.get('content-length');
-    if (!header) return null;
-    const length = parseInt(header, 10);
-    return Number.isFinite(length) && length > 0 ? length : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Downloads with a stall timeout: the timer resets on every progress event,
- * so a slow-but-moving Wi-Fi transfer is never cut off, but a connection
- * that goes dead partway through (captive portal, dropped Wi-Fi) is aborted
- * instead of leaving the caller's "Downloading…" spinner running forever.
- */
-async function downloadWithStallTimeout(url: string, destination: File): Promise<File> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> = setTimeout(() => controller.abort('stalled'), STALL_TIMEOUT_MS);
-  const resetTimer = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => controller.abort('stalled'), STALL_TIMEOUT_MS);
-  };
-
-  try {
-    return await File.downloadFileAsync(url, destination, {
-      signal: controller.signal,
-      onProgress: resetTimer,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function friendlyDownloadError(err: unknown): Error {
-  if (err instanceof Error && err.name === 'AbortError') {
-    return new Error('Download stalled — no data received for 30s. Check your connection and try again.');
-  }
-  return err instanceof Error ? err : new Error(String(err));
-}
-
 /**
  * Generic on-device management for a single named MBTiles file under
  * tiles/ — the street basemap (tileStore.ts, which also handles glyphs)
  * and the satellite/LiDAR base layers (baseLayerTiles.ts) are all just
  * this, parameterized by filename and download URL.
+ *
+ * The hardened transfer itself (disk-space preflight, stall timeout,
+ * partial-file cleanup, friendly error mapping) lives in fileDownload.ts,
+ * shared with the overlay data files.
  */
 export function tilesDir(): Directory {
   return new Directory(Paths.document, TILES_DIR_NAME);
@@ -97,57 +50,72 @@ export function getTileSetStatus(filename: string): TileSetStatus {
 }
 
 /**
- * One-time download of a tile database over Wi-Fi (spec §8). Downloads to a
- * temp name first so a half-finished transfer is never mistaken for a valid
- * database on the next launch.
+ * Cheap sanity check that a downloaded file is actually a SQLite database,
+ * by reading its 16-byte magic header.
  *
- * Hardened against the ways this can fail partway through: a preflight
- * storage check (best-effort — skipped if the server won't answer HEAD) so
- * a doomed multi-minute download doesn't start at all when there's
- * obviously not enough room, a stall timeout so a dead connection doesn't
- * leave the caller waiting forever, and cleanup of the partial file on any
- * failure so a failed attempt doesn't eat into the very storage budget that
- * may have caused it.
+ * Returns `null` when the check itself couldn't run (platform quirk, no read
+ * access) — deliberately tri-state, so an unreadable header is treated as
+ * "unknown, carry on" rather than condemning a good download. Only a
+ * positive mismatch rejects.
+ *
+ * This exists because the failure it catches is silent. A truncated or
+ * HTML-error-page "database" is not zero bytes, so it passes the empty-file
+ * check, gets reported ready, and then renders an empty layer with no error
+ * anywhere — which is exactly the symptom the parcels layer died of before
+ * (docs/DATA.md §6). It is also a live risk during development: the desktop
+ * conversion writes these files in place while the dev file server is
+ * serving that same directory, so a download can catch one mid-write.
  */
-export async function downloadTileSet(filename: string, url: string): Promise<TileSetStatus> {
-  const dir = tilesDir();
-  if (!dir.exists) {
-    dir.create({ intermediates: true });
-  }
-
-  const partial = new File(dir, `${filename}.download`);
-  if (partial.exists) {
-    partial.delete();
-  }
-
-  const expectedBytes = await fetchContentLength(url);
-  const available = Paths.availableDiskSpace;
-  if (expectedBytes !== null && typeof available === 'number') {
-    const needed = expectedBytes + DISK_SPACE_MARGIN_BYTES;
-    if (available < needed) {
-      throw new Error(
-        `Not enough free storage: this download needs about ${formatBytes(expectedBytes)}, but only ${formatBytes(available)} is free.`,
-      );
+function looksLikeSqlite(file: File): boolean | null {
+  let handle: ReturnType<File['open']> | undefined;
+  try {
+    handle = file.open(FileMode.ReadOnly);
+    const bytes = handle.readBytes(SQLITE_MAGIC.length);
+    if (bytes.length < SQLITE_MAGIC.length) {
+      return false;
+    }
+    let header = '';
+    for (let i = 0; i < SQLITE_MAGIC.length; i += 1) {
+      header += String.fromCharCode(bytes[i]);
+    }
+    return header === SQLITE_MAGIC;
+  } catch {
+    return null;
+  } finally {
+    try {
+      handle?.close();
+    } catch {
+      // A close failure tells us nothing about the file's validity.
     }
   }
+}
 
-  try {
-    await downloadWithStallTimeout(url, partial);
-  } catch (err) {
-    if (partial.exists) partial.delete();
-    throw friendlyDownloadError(err);
-  }
+/**
+ * One-time download of a tile database over Wi-Fi (spec §8), written
+ * atomically so a half-finished transfer is never mistaken for a valid
+ * database on the next launch, then header-checked so a truncated or
+ * non-SQLite response fails loudly instead of rendering an empty map.
+ */
+export async function downloadTileSet(
+  filename: string,
+  url: string,
+  onProgress?: (info: DownloadProgressInfo) => void,
+): Promise<TileSetStatus> {
+  await downloadFileTo(tilesDir(), filename, url, onProgress);
 
-  if (!partial.exists || (partial.size ?? 0) === 0) {
-    if (partial.exists) partial.delete();
-    throw new Error('Download finished but produced an empty file — try again.');
+  const file = tileSetFile(filename);
+  if (looksLikeSqlite(file) === false) {
+    // Don't leave it on disk: it would report `ready` on the next launch and
+    // silently render nothing.
+    try {
+      file.delete();
+    } catch {
+      // Best-effort — the thrown error below is the important part.
+    }
+    throw new Error(
+      `Downloaded ${filename} is not a valid tile database — the transfer may have been interrupted, or the file was still being written. Try again.`,
+    );
   }
-
-  const finalFile = tileSetFile(filename);
-  if (finalFile.exists) {
-    finalFile.delete();
-  }
-  partial.move(finalFile);
 
   return getTileSetStatus(filename);
 }
