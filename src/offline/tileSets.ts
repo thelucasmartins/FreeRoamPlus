@@ -46,10 +46,28 @@ const SQLITE_MAGIC = 'SQLite format 3\0';
  */
 const DEFAULT_MIN_TILE_DB_BYTES = 1024 * 1024;
 
-/** Per-artifact floors for databases whose legitimate size is known to be much larger. */
+/**
+ * Per-artifact floors for databases whose legitimate size is known to be
+ * much larger than the default.
+ *
+ * CALIBRATED AGAINST THE REAL ARTIFACT, not an estimate. The measured
+ * Sonoma County basemap is 24,125,440 bytes (23MB, 4,230 tiles, z0–14).
+ * This floor was originally set to 20MB from the docs' "tens of MB", which
+ * the real build then cleared by only 15% — far too tight. A slightly
+ * smaller rebuild (a narrower bbox, a lower maxzoom, a different Planetiler
+ * release) would have been rejected as empty.
+ *
+ * That direction of failure is worse here than anywhere else in this file:
+ * the overlays fall back to GeoJSON when their tiles are refused, but the
+ * basemap has no fallback at all. Refusing a valid sonoma.mbtiles leaves the
+ * app with no map, which is a total failure in place of the partial-render
+ * this floor is guarding against.
+ *
+ * 5MB keeps ~4.8x headroom under the real artifact while still sitting ~300x
+ * above the empty ~16KB shell, which is the case a floor can actually catch.
+ */
 const MIN_TILE_DB_BYTES_BY_FILE: Record<string, number> = {
-  // A Sonoma County OpenMapTiles basemap runs to tens of megabytes (docs/DATA.md §1).
-  [MBTILES_FILENAME]: 20 * 1024 * 1024,
+  [MBTILES_FILENAME]: 5 * 1024 * 1024,
 };
 
 function minBytesFor(filename: string): number {

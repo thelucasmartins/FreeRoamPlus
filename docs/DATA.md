@@ -136,7 +136,7 @@ app treats them differently.
 
 | File | Size | Source layer | Rendered by |
 | --- | --- | --- | --- |
-| `sonoma.mbtiles` | tens of MB | (OpenMapTiles schema, §1) | the basemap style |
+| `sonoma.mbtiles` | ~23MB | (OpenMapTiles schema, §1) | the basemap style |
 | `structures.mbtiles` | ~44MB | `structures` | `StructuresOverlay` (§4) |
 | `parcels.mbtiles` | ~44MB | `parcels` | `ParcelsOverlay` (§6) |
 
@@ -180,15 +180,17 @@ Storage to budget on the device, in the order you'd install it:
 
 | | Size |
 | --- | --- |
-| Basemap `sonoma.mbtiles` | tens of MB |
+| Basemap `sonoma.mbtiles` | ~23MB |
 | Both overlay tile databases | ~88MB |
 | `roads` + `search-index` + `dem` | ~59MB |
 | *Optional, and unnecessary once tiles are installed:* `structures.geojson` + `parcels.geojson` | ~160MB |
 
-So a device with tiles needs roughly **150MB plus the basemap**, not the
-~220MB an earlier version of this document quoted — that figure predated the
-tile databases and assumed every overlay arrived as GeoJSON. Pulling
-everything, including the two redundant GeoJSON files, is closer to 310MB.
+So a fully-provisioned device needs about **170MB**, not the ~220MB an
+earlier version of this document quoted — that figure predated the tile
+databases and assumed every overlay arrived as GeoJSON. Pulling everything,
+including the two redundant GeoJSON files, is closer to 330MB.
+
+All four sizes above are measured from the real artifacts, not estimated.
 
 The preflight check refuses a download that would leave under 50MB free, so
 a phone that's nearly full fails fast with a readable message rather than
