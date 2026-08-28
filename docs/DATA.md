@@ -463,6 +463,27 @@ ogr2ogr -f MVT data/.staging/parcels.mbtiles data/overlays/parcels.geojson \
   -nln parcels -dsco MINZOOM=10 -dsco MAXZOOM=16
 ```
 
+**Expect this warning on dense data, and do not treat it as a failure:**
+
+```
+Warning 1: At least one tile exceeded the default maximum tile size of
+500000 bytes and was encoded at lower resolution
+```
+
+GDAL caps tiles at 500KB and, when one overflows, re-encodes *that tile*
+with simplified geometry. **Every feature is still present** — only vertex
+precision drops on the densest tiles. This is strictly better than what the
+tippecanoe recipe would have done: `--drop-densest-as-needed` resolves the
+same overflow by *dropping features*. For parcels, where "is my parcel here
+and what is its APN" matters far more than boundary vertex fidelity, losing
+precision beats losing parcels. All 188,492 with some simplified edges is
+the right trade.
+
+If it ever needs addressing, two levers, both a rerun rather than a
+redesign: raise the cap with `-dsco MAX_SIZE=<bigger>`, or raise `MAXZOOM`
+so features spread across more tiles and fewer overflow. Neither is worth a
+full reconversion unless parcel edges look visibly wrong on a device.
+
 `-nln` sets the **source layer name inside the tiles**, and it matters more
 than it looks: a layer referencing a source-layer that doesn't exist renders
 nothing, silently, with no error anywhere. The names are `structures` and
