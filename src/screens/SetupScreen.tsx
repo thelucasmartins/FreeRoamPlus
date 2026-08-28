@@ -8,6 +8,11 @@ import {
 } from 'react-native';
 
 import { TILE_DOWNLOAD_URL } from '../config';
+import {
+  downloadOverlays,
+  overlayLabel,
+  type OverlayId,
+} from '../offline/overlayFiles';
 import { downloadTiles, type TileStoreStatus } from '../offline/tileStore';
 
 interface SetupScreenProps {
@@ -22,6 +27,9 @@ interface SetupScreenProps {
 export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenProps) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overlayBusy, setOverlayBusy] = useState(false);
+  const [overlayProgress, setOverlayProgress] = useState<string | null>(null);
+  const [overlayResult, setOverlayResult] = useState<string | null>(null);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -38,6 +46,38 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
     } finally {
       setDownloading(false);
     }
+  };
+
+  /**
+   * Overlay data is a separate transfer from the basemap and doesn't gate
+   * entry to the map — the stores fall back to sample data when a file is
+   * missing, so a partial or failed overlay download still leaves a usable
+   * app. `downloadOverlays` reports per-file outcomes instead of throwing,
+   * so one failure can't strand this screen.
+   */
+  const runOverlayDownload = async (ids?: OverlayId[]) => {
+    setOverlayBusy(true);
+    setOverlayResult(null);
+    setOverlayProgress('Starting…');
+    const outcomes = await downloadOverlays(ids, (id, info) => {
+      const pct =
+        info.totalBytes && info.totalBytes > 0
+          ? ` ${Math.round((info.bytesWritten / info.totalBytes) * 100)}%`
+          : '';
+      setOverlayProgress(`${overlayLabel(id)}${pct}`);
+    });
+    setOverlayProgress(null);
+    setOverlayBusy(false);
+
+    const failed = outcomes.filter((o) => !o.ok);
+    const okCount = outcomes.length - failed.length;
+    setOverlayResult(
+      failed.length === 0
+        ? `${okCount}/${outcomes.length} installed.`
+        : `${okCount}/${outcomes.length} installed — ${failed
+            .map((f) => `${f.label}: ${f.error}`)
+            .join('; ')}`,
+    );
   };
 
   return (
@@ -63,6 +103,41 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
       )}
 
       {error && <Text style={styles.error}>{error}</Text>}
+
+      <View style={styles.divider} />
+
+      <Text style={styles.body}>
+        Overlay data (structures, roads, parcels, search, elevation) downloads
+        separately — about 220MB. The map works without it using sample data.
+      </Text>
+
+      {overlayBusy ? (
+        <View style={styles.progressRow}>
+          <ActivityIndicator color="#4a6b3a" />
+          <Text style={styles.progressText}>{overlayProgress ?? 'Working…'}</Text>
+        </View>
+      ) : (
+        <>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => runOverlayDownload()}
+          >
+            <Text style={styles.primaryButtonText}>Download overlay data</Text>
+          </Pressable>
+          {/* 18KB — proves the whole LAN path (URL, firewall, disk, write)
+              in a second, before committing to a 220MB transfer. */}
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => runOverlayDownload(['dem'])}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Test connection only (18KB)
+            </Text>
+          </Pressable>
+        </>
+      )}
+
+      {overlayResult && <Text style={styles.body}>{overlayResult}</Text>}
 
       <Pressable style={styles.secondaryButton} onPress={onUseOnlineFallback}>
         <Text style={styles.secondaryButtonText}>
@@ -131,6 +206,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 12,
     textAlign: 'center',
+  },
+  divider: {
+    height: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#ddd5c7',
+    marginTop: 28,
   },
   secondaryButton: {
     marginTop: 28,
