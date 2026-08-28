@@ -164,6 +164,14 @@ Structures toggle shows bundled placeholder data (see
 the layer is exercisable before the real pipeline runs — the in-app legend
 flags this with a "Sample data" note.
 
+> **At county scale this layer renders from vector tiles, not this GeoJSON.**
+> `structures.geojson` is ~102MB — the largest overlay, bigger than parcels —
+> and parsing it whole is the same trap described under §6. The GeoJSON below
+> is still what the pipeline produces and what the tiles are built *from*, but
+> the app prefers `structures.mbtiles` when it's present and skips reading the
+> GeoJSON entirely. See "Vector tiles for the two large overlays" in §6 for
+> the build command, the staging rule, and the resolution order.
+
 **Real data, partially** from [pipeline/fetchStructures.ts](../pipeline/fetchStructures.ts):
 real OSM building footprints for the whole county via Overpass — every
 `documented: true` structure it produces is real. Confirmed run: 323,040
@@ -403,25 +411,79 @@ into `parcels.geojson`; 747 were skipped for missing required fields, see
 the script's own log output). The resulting file is ~60MB. Loading that as
 one flat GeoJSON file — parsed synchronously into a single JS object
 and handed to one `GeoJSONSource`, which is what
-[src/overlays/parcelsStore.ts](../src/overlays/parcelsStore.ts) does today —
+[src/overlays/parcelsStore.ts](../src/overlays/parcelsStore.ts) used to do —
 is exactly the kind of thing that stalls or OOMs a phone, and would silently
 render nothing if the parse or the source ever failed. That code path is
 correct and safe for a moderate export (a sub-region, or the bundled
 sample), but isn't the one to point at the full county.
 
-For the full county-wide export, don't ship it as GeoJSON at all: pre-tile
-it into vector tiles the same way `sonoma.mbtiles` already works reliably
-(step 1 above) — `tippecanoe` is the standard tool for this:
+**This is now fixed, and the fix has a subtlety worth understanding before
+you touch either store.** See "Vector tiles for the two large overlays"
+below.
+
+### Vector tiles for the two large overlays
+
+Structures (~102MB) and parcels (~58MB) are not shipped as GeoJSON. Both are
+pre-tiled into MBTiles and streamed by viewport, which is the actual fix for
+the reliability problem — not just a smaller minzoom.
+
+**Building the tiles.** Use `ogr2ogr` (GDAL), which is already available in
+the [lidar-pipeline](../lidar-pipeline/) conda environment. An earlier
+version of this document recommended `tippecanoe`; that is a fine tool but
+is not installed here, and `ogr2ogr` is what these files were actually built
+with:
 
 ```bash
-tippecanoe -o data/parcels.mbtiles -l parcels -Z10 -z16 --drop-densest-as-needed parcels.geojson
+ogr2ogr -f MVT data/.staging/parcels.mbtiles data/overlays/parcels.geojson \
+  -nln parcels -dsco MINZOOM=10 -dsco MAXZOOM=16
 ```
 
-Then swap `ParcelsOverlay`'s `GeoJSONSource` for a `VectorSource` pointed at
-`mbtiles://.../parcels.mbtiles`, matching the pattern in
-[src/map/style.ts](../src/map/style.ts). MapLibre streams vector tiles by
-viewport instead of parsing the whole dataset up front, which is the actual
-fix for the reliability problem — not just a smaller minzoom.
+`-nln` sets the **source layer name inside the tiles**, and it matters more
+than it looks: a layer referencing a source-layer that doesn't exist renders
+nothing, silently, with no error anywhere. The names are `structures` and
+`parcels`, mirrored in `STRUCTURES_SOURCE_LAYER` / `PARCELS_SOURCE_LAYER` in
+[src/config.ts](../src/config.ts) so they're declared in exactly one place.
+
+**Build to staging, then rename into place.** Note the `data/.staging/`
+output path above. The dev file server serves `data/`, so writing an MBTiles
+file directly to its final path publishes a partial database for the whole
+duration of the conversion — and a truncated SQLite file is not zero bytes,
+so it downloads happily and then renders an empty layer. Build to
+`data/.staging/`, then `mv` into `data/` on success only; a rename within a
+volume is atomic, so the served path never exists in a partial state.
+Anything in `data/.staging/` is by definition incomplete.
+
+**Tiles-first resolution — the part that's easy to get wrong.** Putting the
+tiles on the device is only half the fix. The stores previously read the
+on-device GeoJSON whenever it was present, so a device holding *both*
+`structures.mbtiles` and `structures.geojson` would render from tiles and
+still take the ~102MB parse — fixing nothing while appearing to.
+
+So [structuresStore.ts](../src/overlays/structuresStore.ts) and
+[parcelsStore.ts](../src/overlays/parcelsStore.ts) resolve in this order,
+and return an `OverlaySource<T>` describing which mode won:
+
+1. tile database present → `{ mode: 'tiles' }`, **returning without reading
+   the `.geojson` at all**;
+2. else real GeoJSON on device → `{ mode: 'file' }`;
+3. else → `{ mode: 'sample' }`.
+
+Step 1's early return is load-bearing, not an optimisation. If you ever
+refactor these stores, preserving it *is* preserving the fix.
+
+A consequence worth planning for: once tiles are the norm, downloading
+structures/parcels GeoJSON is ~160MB of dead weight that also re-enables the
+parse. Dropping them from the default download set in
+[overlayFiles.ts](../src/offline/overlayFiles.ts) has to happen in step with
+the render change — earlier, and the layers have nothing to draw.
+
+**Tap-to-inspect is unaffected.** The parcel info card is driven by the
+source's own `onPress`, not by a lookup against parsed features, and in
+`@maplibre/maplibre-react-native` 11.3.7 both `VectorSourceProps` and
+`GeoJSONSourceProps` extend `PressableSourceProps` — identical handler
+signature. One gotcha if you add layers: on `<Layer>` the prop is the
+hyphenated `"source-layer"`, not `sourceLayer`, whenever you're using
+`paint`/`layout` rather than the deprecated `style` prop.
 
 ## 7. On-device routing (spec §7)
 
