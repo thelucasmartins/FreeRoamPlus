@@ -53,12 +53,35 @@ county-scale run is hours long.
   `park` and `boundary` — five of the seven layers below. A build that
   somehow skipped them would produce a basemap of roads and buildings over
   blank ground.
-- **Heap:** `-Xmx4g` was specified here originally and is wrong on a
-  memory-constrained machine. `-Xmx2g` with the default `--storage=mmap`
-  spills to disk instead, which is what that flag is for. On a box with
-  under ~1GB free, drop to `-Xmx1500m` and pin `--tmpdir` to a drive with
-  room; verify from Planetiler's own startup log which tmpdir it actually
-  used rather than assuming the flag took.
+- **Heap — measured, not estimated.** `-Xmx4g` was specified here
+  originally and is wrong on a memory-constrained machine. From a real run
+  of the command above on this dataset:
+
+  | | |
+  | --- | --- |
+  | Peak live heap (postGC) | **1,229 MB** |
+  | Peak heap in use | 1,434 MB |
+  | postGC after the OSM passes | **305 MB** |
+
+  `-Xmx2g` is the right default: peak live is ~1.2GB, so 1500m runs at 82%
+  utilisation with thin headroom, and `-Xmx` is a ceiling rather than a
+  reservation — an unused 2g costs nothing.
+
+  **The peak is bounds-independent, which is the counter-intuitive part.**
+  `--bounds` clips the *output tiles*; it does not clip input parsing.
+  `osm_pass1`/`osm_pass2` build a node map over every node in the extract
+  (79M for norcal) no matter how small the output box is. So a "tiny" test
+  run has essentially the same memory profile as a county run, and memory
+  does **not** scale with area. The corollary is the useful one: postGC
+  collapsing to 305MB once the OSM passes finish means the tile-write phase
+  is cheap in heap terms, because it streams to disk.
+
+  Practically: a small-bbox smoke test is a genuine predictor of a large
+  run's memory behaviour, not a lower bound. Use one.
+
+  Pin `--tmpdir` to a drive with room, and verify from Planetiler's own
+  startup log which tmpdir it actually used rather than assuming the flag
+  took.
 - `--bounds` clips to Sonoma County so the output stays small (roughly tens of
   MB rather than GB).
 - Output uses the OpenMapTiles schema, which is what `src/map/style.ts`
