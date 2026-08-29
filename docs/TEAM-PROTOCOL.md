@@ -235,6 +235,19 @@ YOU ARE EXPECTED TO CRITICISE ACTUAL. Report costs of your own
 recommendations too. An auditor who never downgrades their own severity
 ratings is noise — retract when you are wrong, explicitly.
 
+RUN /loop FROM THE START. Invoke it in your first turn, self-paced, and keep
+it running for the whole session. Each tick, check the machine as well as the
+work: free space per drive, memory pressure, runaway logs or dump files,
+processes that should not be running, and whether long jobs are progressing
+or silently stalled. Report anomalies immediately; report "nothing to flag"
+in one line otherwise.
+Why: the two most dangerous findings on a real run were both invisible to
+everyone executing — a system drive filling toward zero, and a gating job
+that had not started 43 minutes after its toolchain was ready. Both were
+caught by a routine timed check, not by anyone noticing. Execution attention
+is on the task; nobody is watching the machine unless someone is assigned to
+watch the machine on a clock.
+
 SILENCE IS INDISTINGUISHABLE FROM FAILURE. If you have found nothing
 meaningful in a long stretch, say so in one line. Never go quiet.
 
@@ -292,4 +305,6 @@ complete should be stood down and its session closed, not kept warm.
 3. Stand up TOPO and RELAY with lane boundaries that do not overlap.
 4. Stand up OVERWATCH last, and hand it the leader's known failure modes as
    starting material. It cannot audit what it does not know to look for.
+   Have it start `/loop` immediately — a timed check is the only thing that
+   sees what nobody executing is looking at.
 5. Identify the gating artifact before assigning anything else.
