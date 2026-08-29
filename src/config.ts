@@ -66,6 +66,67 @@ export const LIDAR_MBTILES_FILENAME = 'lidar-hillshade.mbtiles';
 /** One-time download source for the LiDAR hillshade tile database. */
 export const LIDAR_TILE_DOWNLOAD_URL = 'http://10.0.0.150:8080/lidar-hillshade.mbtiles';
 
+/**
+ * Whether the satellite and LiDAR raster tile databases have actually been
+ * produced and published to the download host yet.
+ *
+ * These are FALSE because no pipeline in this repo produces either file:
+ * `data/` holds only sonoma/structures/parcels.mbtiles. The download code,
+ * the styles and the UI segments were all written ahead of the data, so the
+ * base-layer picker offered two buttons whose only possible outcome was a
+ * 404 — an invitation to a guaranteed failure, indistinguishable to a tester
+ * from the LAN transfer being broken.
+ *
+ * They gate *offering* the layer, not using it: BaseLayerSelector shows a
+ * segment when the flag is set OR the file is already on the device, so a
+ * sideloaded database still works and flipping a flag on is all that is
+ * needed once a pipeline exists. Deliberately compile-time constants rather
+ * than a runtime probe — the app must decide this with no network.
+ */
+export const SATELLITE_TILES_PROVISIONED = false;
+export const LIDAR_TILES_PROVISIONED = false;
+
+/**
+ * Font glyphs for map labels (road names, place names).
+ *
+ * MapLibre Native cannot draw a `symbol` layer without SDF glyph PBFs; there
+ * is no system-font fallback for Latin text. Without these the style omits
+ * every label layer and the map renders correct geometry with no names on
+ * it — which looks like a finished map rather than a missing feature, so it
+ * survived until an audit caught it.
+ *
+ * The stack name must match `text-font` in labelLayers.ts and RoadsOverlay /
+ * StructuresOverlay, and it doubles as a directory name in both the served
+ * URL and the on-device path.
+ */
+export const GLYPH_FONTSTACK = 'Noto Sans Regular';
+
+/** Directory under tiles/ holding <fontstack>/<range>.pbf. */
+export const GLYPHS_DIR_NAME = 'fonts';
+
+/**
+ * Glyph ranges to install, each a 256-codepoint block.
+ *
+ * MapLibre requests only the ranges a label actually needs, so this set is
+ * chosen for Sonoma County place and road names rather than for coverage:
+ *   0-255      Basic Latin + Latin-1 Supplement — everything ordinary
+ *   256-511    Latin Extended-A — accented names (Cañon, Sebastopol area)
+ *   8192-8447  General Punctuation — OSM names carry U+2019 curly
+ *              apostrophes ("Jack London's"), which are NOT in 0-255
+ *
+ * A range that is missing on device makes only its own glyphs fail, not the
+ * map — but every range listed here must be present for `ready`, so a
+ * half-finished install never reports itself as usable.
+ */
+export const GLYPH_RANGES = ['0-255', '256-511', '8192-8447'] as const;
+
+/**
+ * Download source for the glyph pack — served from data/fonts/ alongside the
+ * tile databases. The fontstack contains spaces, so it is percent-encoded
+ * for the URL but NOT for the on-device directory name.
+ */
+export const GLYPHS_DOWNLOAD_BASE_URL = `http://10.0.0.150:8080/${GLYPHS_DIR_NAME}`;
+
 /** Directory (under the app's document dir) where overlay GeoJSON lives. */
 export const OVERLAYS_DIR_NAME = 'overlays';
 

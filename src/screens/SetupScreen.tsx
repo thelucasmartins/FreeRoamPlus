@@ -7,8 +7,9 @@ import {
   View,
 } from 'react-native';
 
-import { TILE_DOWNLOAD_URL } from '../config';
+import { GLYPH_RANGES, TILE_DOWNLOAD_URL } from '../config';
 import { deleteLidarTiles, deleteSatelliteTiles } from '../offline/baseLayerTiles';
+import { deleteGlyphs, downloadGlyphs, getGlyphsStatus } from '../offline/glyphs';
 import {
   deleteOverlay,
   downloadOverlays,
@@ -27,13 +28,19 @@ import { deleteTiles, downloadTiles, type TileStoreStatus } from '../offline/til
 interface SetupScreenProps {
   onTilesReady: (status: TileStoreStatus) => void;
   onUseOnlineFallback: () => void;
+  /**
+   * Returns to the map. Present only when this screen was opened from the
+   * map (Layers → Map data); absent on the first-run path, where there is no
+   * map to go back to yet.
+   */
+  onClose?: () => void;
 }
 
 /**
  * Shown when no offline tile database is on the device yet. Offers the
  * one-time Wi-Fi download (spec §8), or an online fallback for development.
  */
-export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenProps) {
+export function SetupScreen({ onTilesReady, onUseOnlineFallback, onClose }: SetupScreenProps) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overlayBusy, setOverlayBusy] = useState(false);
@@ -44,6 +51,10 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
   const [tileResult, setTileResult] = useState<string | null>(null);
   const [resetBusy, setResetBusy] = useState(false);
   const [resetResult, setResetResult] = useState<string | null>(null);
+  const [glyphsBusy, setGlyphsBusy] = useState(false);
+  const [glyphsProgress, setGlyphsProgress] = useState<string | null>(null);
+  const [glyphsStatus, setGlyphsStatus] = useState(() => getGlyphsStatus());
+  const [glyphsResult, setGlyphsResult] = useState<string | null>(null);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -143,6 +154,43 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
   };
 
   /**
+   * Font glyphs for map labels.
+   *
+   * Not cosmetic: MapLibre Native cannot draw a symbol layer without SDF
+   * glyph PBFs and has no system-font fallback for Latin script, so with no
+   * pack installed the style drops every label layer and the map renders
+   * with no road or place names at all — a failure that looks exactly like a
+   * finished map, which is how it survived until an audit found it.
+   *
+   * Small enough (tens of KB per range) that this is a separate, cheap
+   * button rather than part of the 220MB overlay transfer.
+   */
+  const runGlyphDownload = async () => {
+    setGlyphsBusy(true);
+    setGlyphsResult(null);
+    setGlyphsProgress('Starting…');
+
+    const { status, failures } = await downloadGlyphs((range, info) => {
+      const pct =
+        info.totalBytes && info.totalBytes > 0
+          ? ` ${Math.round((info.bytesWritten / info.totalBytes) * 100)}%`
+          : '';
+      setGlyphsProgress(`Range ${range}${pct}`);
+    });
+
+    setGlyphsProgress(null);
+    setGlyphsBusy(false);
+    setGlyphsStatus(status);
+    setGlyphsResult(
+      failures.length === 0
+        ? 'Labels installed — restart the app to see road and place names.'
+        : `${status.installedRanges.length}/${GLYPH_RANGES.length} ranges installed — ${failures
+            .map((f) => `${f.range}: ${f.error}`)
+            .join('; ')}`,
+    );
+  };
+
+  /**
    * Clears every downloaded file so a bad one can be replaced.
    *
    * This is the recovery path for the failure no guard can catch. The size
@@ -169,6 +217,9 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
       // stuck state this control exists to escape, just on a different layer.
       deleteSatelliteTiles();
       deleteLidarTiles();
+      deleteGlyphs();
+      setGlyphsStatus(getGlyphsStatus());
+      setGlyphsResult(null);
       setOverlayResult(null);
       setTileResult(null);
       setError(null);
@@ -183,7 +234,9 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
   return (
     <View style={styles.container}>
       <Text style={styles.title}>FreeRoam+</Text>
-      <Text style={styles.subtitle}>Offline map data not installed</Text>
+      <Text style={styles.subtitle}>
+        {onClose ? 'Map data' : 'Offline map data not installed'}
+      </Text>
       <Text style={styles.body}>
         The Sonoma County tile database (sonoma.mbtiles) is not on this device
         yet. Download it once over Wi-Fi — after that the map works with no
@@ -254,6 +307,28 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
 
       {tileResult && <Text style={styles.body}>{tileResult}</Text>}
 
+      {/* Labels are the difference between a map and a picture of one. This
+          is deliberately its own control: it is a few hundred KB, it is the
+          single most visible thing missing without it, and burying it in the
+          220MB overlay transfer would mean a failed overlay download also
+          costs you every street name. */}
+      {glyphsBusy ? (
+        <View style={styles.progressRow}>
+          <ActivityIndicator color="#4a6b3a" />
+          <Text style={styles.progressText}>{glyphsProgress ?? 'Working…'}</Text>
+        </View>
+      ) : (
+        <Pressable style={styles.secondaryButton} onPress={runGlyphDownload}>
+          <Text style={styles.secondaryButtonText}>
+            {glyphsStatus.ready
+              ? 'Map labels installed — re-download'
+              : 'Download map labels (road & place names)'}
+          </Text>
+        </Pressable>
+      )}
+
+      {glyphsResult && <Text style={styles.body}>{glyphsResult}</Text>}
+
       {/* Recovery path. A tile database that is bad but plausibly sized
           passes every guard and is never fallen back from — this is the
           only way out of that state from inside the app. */}
@@ -269,11 +344,17 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
 
       {resetResult && <Text style={styles.body}>{resetResult}</Text>}
 
-      <Pressable style={styles.secondaryButton} onPress={onUseOnlineFallback}>
-        <Text style={styles.secondaryButtonText}>
-          Continue with online fallback (dev only)
-        </Text>
-      </Pressable>
+      {onClose ? (
+        <Pressable style={styles.primaryButton} onPress={onClose}>
+          <Text style={styles.primaryButtonText}>Back to map</Text>
+        </Pressable>
+      ) : (
+        <Pressable style={styles.secondaryButton} onPress={onUseOnlineFallback}>
+          <Text style={styles.secondaryButtonText}>
+            Continue with online fallback (dev only)
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }

@@ -5,11 +5,20 @@ export type BaseLayerId = 'street' | 'satellite' | 'lidar';
 interface BaseLayerSelectorProps {
   active: BaseLayerId;
   onSelect: (id: BaseLayerId) => void;
+  /**
+   * Whether to show the Satellite segment at all. False when no
+   * satellite.mbtiles has been produced yet — offering a button whose only
+   * possible outcome is a 404 makes a missing pipeline look like a broken
+   * download path. See SATELLITE_TILES_PROVISIONED in config.ts.
+   */
+  satelliteOffered: boolean;
   satelliteReady: boolean;
   satelliteDownloading: boolean;
   /** Message from the last failed satellite download attempt, if any. */
   satelliteError: string | null;
   onDownloadSatellite: () => void;
+  /** Whether to show the LiDAR segment at all — see satelliteOffered. */
+  lidarOffered: boolean;
   lidarReady: boolean;
   lidarDownloading: boolean;
   /** Message from the last failed LiDAR download attempt, if any. */
@@ -52,10 +61,12 @@ function Segment({ label, active, ready, downloading, onPress }: SegmentProps) {
 export function BaseLayerSelector({
   active,
   onSelect,
+  satelliteOffered,
   satelliteReady,
   satelliteDownloading,
   satelliteError,
   onDownloadSatellite,
+  lidarOffered,
   lidarReady,
   lidarDownloading,
   lidarError,
@@ -73,6 +84,11 @@ export function BaseLayerSelector({
   };
 
   const error = satelliteError ?? lidarError;
+
+  // With neither optional base layer available the pill would be a
+  // one-option picker permanently stuck on its only choice — noise, not a
+  // control. The labels toggle goes with it: it only applies to hybrid mode.
+  if (!satelliteOffered && !lidarOffered) return null;
 
   return (
     <View style={styles.wrapper}>
@@ -99,20 +115,24 @@ export function BaseLayerSelector({
           downloading={false}
           onPress={() => onSelect('street')}
         />
-        <Segment
-          label="Satellite"
-          active={active === 'satellite'}
-          ready={satelliteReady}
-          downloading={satelliteDownloading}
-          onPress={() => handlePress('satellite', satelliteReady, satelliteDownloading, onDownloadSatellite)}
-        />
-        <Segment
-          label="LiDAR"
-          active={active === 'lidar'}
-          ready={lidarReady}
-          downloading={lidarDownloading}
-          onPress={() => handlePress('lidar', lidarReady, lidarDownloading, onDownloadLidar)}
-        />
+        {satelliteOffered && (
+          <Segment
+            label="Satellite"
+            active={active === 'satellite'}
+            ready={satelliteReady}
+            downloading={satelliteDownloading}
+            onPress={() => handlePress('satellite', satelliteReady, satelliteDownloading, onDownloadSatellite)}
+          />
+        )}
+        {lidarOffered && (
+          <Segment
+            label="LiDAR"
+            active={active === 'lidar'}
+            ready={lidarReady}
+            downloading={lidarDownloading}
+            onPress={() => handlePress('lidar', lidarReady, lidarDownloading, onDownloadLidar)}
+          />
+        )}
       </View>
     </View>
   );

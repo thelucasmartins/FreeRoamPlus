@@ -11,7 +11,15 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type NativeSyntheticEvent } from 'react-native';
 
-import { DEFAULT_ZOOM, FOLLOW_ZOOM, MAX_ZOOM, MIN_ZOOM, SONOMA_CENTER } from '../config';
+import {
+  DEFAULT_ZOOM,
+  FOLLOW_ZOOM,
+  LIDAR_TILES_PROVISIONED,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  SATELLITE_TILES_PROVISIONED,
+  SONOMA_CENTER,
+} from '../config';
 import { loadDem } from '../elevation/demStore';
 import { buildElevationProfile } from '../elevation/profile';
 import type { ElevationGrid } from '../elevation/types';
@@ -64,9 +72,17 @@ interface MapScreenProps {
   offline: boolean;
   /** file:// glyph template shared with every base style, if fonts are on-device. */
   glyphsUrl: string | null;
+  /** Opens the map-data screen — the only way back to downloads and reset. */
+  onOpenSetup: () => void;
 }
 
-export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl }: MapScreenProps) {
+export function MapScreen({
+  streetMapStyle,
+  streetMbtilesUrl,
+  offline,
+  glyphsUrl,
+  onOpenSetup,
+}: MapScreenProps) {
   const { status: locationStatus, servicesEnabled, requestOrOpenSettings } = useUserLocation();
   const currentPosition = useCurrentPosition({ enabled: locationStatus === 'granted' });
   const [following, setFollowing] = useState(false);
@@ -395,14 +411,17 @@ export function MapScreen({ streetMapStyle, streetMbtilesUrl, offline, glyphsUrl
         parcelsVisible={parcelsVisible}
         onToggleParcels={setParcelsVisible}
         parcelsIsSample={parcelsSource !== null && isSampleSource(parcelsSource)}
+        onOpenSetup={onOpenSetup}
       />
       <BaseLayerSelector
         active={baseLayer}
         onSelect={setBaseLayer}
+        satelliteOffered={SATELLITE_TILES_PROVISIONED || satelliteStatus.ready}
         satelliteReady={satelliteStatus.ready}
         satelliteDownloading={satelliteDownloading}
         satelliteError={satelliteError}
         onDownloadSatellite={handleDownloadSatellite}
+        lidarOffered={LIDAR_TILES_PROVISIONED || lidarStatus.ready}
         lidarReady={lidarStatus.ready}
         lidarDownloading={lidarDownloading}
         lidarError={lidarError}

@@ -13,6 +13,8 @@ interface LayersPanelProps {
   onToggleParcels: (visible: boolean) => void;
   /** True when the parcels layer is showing bundled placeholder data. */
   parcelsIsSample: boolean;
+  /** Opens the map-data screen (downloads, labels, reset). */
+  onOpenSetup: () => void;
 }
 
 /**
@@ -29,6 +31,7 @@ export function LayersPanel({
   parcelsVisible,
   onToggleParcels,
   parcelsIsSample,
+  onOpenSetup,
 }: LayersPanelProps) {
   return (
     <View style={styles.panel}>
@@ -127,6 +130,22 @@ export function LayersPanel({
           )}
         </View>
       )}
+
+      {/* The only route back to the map-data screen. Without it every
+          download control and the reset button are stranded: App.tsx shows
+          SetupScreen solely when the basemap is missing, so the moment
+          sonoma.mbtiles lands the whole screen becomes unreachable — including
+          the reset, whose entire purpose is recovering from a bad tile
+          database that reports itself ready. */}
+      <Pressable
+        style={[styles.row, styles.rowWithDivider]}
+        onPress={onOpenSetup}
+        accessibilityRole="button"
+        accessibilityLabel="Map data: downloads, labels and reset"
+      >
+        <Text style={styles.rowLabel}>Map data</Text>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
     </View>
   );
 }
@@ -223,6 +242,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 10,
     color: '#8a7a66',
+  },
+  chevron: {
+    fontSize: 18,
+    color: '#8a7a66',
+    paddingHorizontal: 4,
   },
   sampleNote: {
     marginTop: 4,

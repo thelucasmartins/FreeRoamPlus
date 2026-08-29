@@ -1,7 +1,6 @@
-import { Directory } from 'expo-file-system';
-
 import { MBTILES_FILENAME, TILE_DOWNLOAD_URL } from '../config';
-import { deleteTileSet, downloadTileSet, getTileSetStatus, tilesDir } from './tileSets';
+import { getGlyphsStatus } from './glyphs';
+import { deleteTileSet, downloadTileSet, getTileSetStatus } from './tileSets';
 
 export interface TileStoreStatus {
   /** True when the MBTiles database exists on-device. */
@@ -19,15 +18,11 @@ function withGlyphs(status: { ready: boolean; mbtilesUrl: string | null; sizeByt
     return { ...status, glyphsUrl: null };
   }
 
-  // Symbol (text) layers need font glyphs. If a glyph pack has been placed at
-  // tiles/fonts/<fontstack>/<range>.pbf, point the style at it; otherwise the
-  // style builder simply omits label layers.
-  const fontsDir = new Directory(tilesDir(), 'fonts');
-  const glyphsUrl = fontsDir.exists
-    ? `${fontsDir.uri.replace(/\/$/, '')}/{fontstack}/{range}.pbf`
-    : null;
-
-  return { ...status, glyphsUrl };
+  // Symbol (text) layers need font glyphs, and a *complete* set of them —
+  // see glyphs.ts. This used to test only whether tiles/fonts/ existed,
+  // which the first partial write creates, so an interrupted install turned
+  // labels on and left MapLibre asking for ranges that were never fetched.
+  return { ...status, glyphsUrl: getGlyphsStatus().glyphsUrl };
 }
 
 export function getStatus(): TileStoreStatus {

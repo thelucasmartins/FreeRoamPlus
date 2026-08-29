@@ -257,17 +257,68 @@ reconnects to Wi-Fi and the lease changes, every download URL in
 `src/config.ts` points at the wrong host and downloads fail with a
 connection error. Re-check the IP before blaming the app.
 
-## 3. Labels (optional for now)
+## 3. Labels — required, not optional
 
-Text layers need font glyphs. The style automatically enables labels when a
-glyph pack exists on-device at `tiles/fonts/<fontstack>/<range>.pbf` (e.g.
-`tiles/fonts/Noto Sans Regular/0-255.pbf`).
+**This step is not cosmetic, and it was mislabelled "optional" here for most
+of the build.** MapLibre Native cannot draw a `symbol` layer without SDF
+glyph PBFs, and it has no system-font fallback for Latin script. With no
+glyph pack installed, `buildLabelLayers()` returns `[]`, the style omits its
+`glyphs` key entirely, and the map renders correct Sonoma County geometry
+with **no road names and no place names anywhere**.
+
+That failure mode is why it survived so long: an unlabeled map does not look
+broken, it looks finished. A device tester following §4 of
+[DEVICE-VERIFICATION.md](DEVICE-VERIFICATION.md) would confirm the basemap
+renders and pass a step whose implementation did not exist.
+
+### Producing the pack
+
+`data/fonts/` is a build artifact like the `.mbtiles` files — `/data` is
+gitignored, so it is produced locally and served, never committed.
 
 Get prebuilt Noto Sans glyphs from the OpenMapTiles fonts release
-(https://github.com/openmaptiles/fonts/releases), and copy the
-`Noto Sans Regular` folder into the app's `tiles/fonts/` directory. An
-in-app download path for fonts is a follow-up task — until then the map
-renders unlabeled, which is fine for verifying step 1 of the build order.
+(https://github.com/openmaptiles/fonts/releases — `noto-sans.zip`, ~62MB),
+and extract just the ranges the app asks for into
+`data/fonts/Noto Sans Regular/`:
+
+| Range | Why |
+| --- | --- |
+| `0-255` | Basic Latin + Latin-1 Supplement — ordinary names |
+| `256-511` | Latin Extended-A — accented names |
+| `8192-8447` | General Punctuation — OSM names use U+2019 curly apostrophes, which are **not** in `0-255` |
+
+Three files, a few hundred KB total. The full 62MB archive is almost
+entirely CJK ranges this app will never request; do not ship it.
+
+The set is declared once in `GLYPH_RANGES`
+([src/config.ts](../src/config.ts)) and is the same list used for both the
+download and the readiness check, so the two cannot drift.
+
+### Getting it onto the device
+
+In-app, from **Layers → Map data → Download map labels**
+([src/offline/glyphs.ts](../src/offline/glyphs.ts)). Each range is fetched
+individually rather than as an archive, because expo-file-system cannot
+unzip.
+
+Readiness requires **every** listed range to be present and over 1KB — not
+merely that `tiles/fonts/` exists. That directory is created by the first
+write, so the earlier existence check meant an interrupted install switched
+labels on and left MapLibre requesting ranges that had never been fetched.
+Same lesson as the empty-SQLite-shell floor in §1: the presence of a
+container has never been evidence that its contents arrived.
+
+### Known unknown
+
+The glyph URL template resolves to a `file://` path containing spaces
+(`.../fonts/Noto Sans Regular/0-255.pbf`), because the directory name must
+match `text-font` exactly. Whether MapLibre Native handles that unescaped on
+both platforms **has not been verified on a device** — like `mbtiles://`
+itself, nothing on the desktop can test it. If labels stay missing after a
+successful install, this is the first thing to suspect, and the fix is to
+rename the stack to a space-free name in both `GLYPH_FONTSTACK` and the
+`text-font` arrays in `labelLayers.ts`, `RoadsOverlay.tsx` and
+`StructuresOverlay.tsx`.
 
 ## 4. Structures overlay (build-order step 2)
 
@@ -879,9 +930,21 @@ mechanism as `sonoma.mbtiles` (step 2 above), via
 on the same generic tile-set management
 ([src/offline/tileSets.ts](../src/offline/tileSets.ts)) `tileStore.ts` was
 refactored onto. Neither blocks using the app: only street is required
-(App.tsx gates on it before `MapScreen` ever mounts), so a missing
-satellite or LiDAR file just means that one segment shows a download
-prompt instead of switching.
+(App.tsx gates on it before `MapScreen` ever mounts).
+
+**Both segments are hidden by default.** Nothing in this repo produces
+either file — the download code, the raster styles and the UI segments were
+all written ahead of the data — so the picker was offering two buttons whose
+only possible outcome was a 404 against the file server. To a tester that is
+indistinguishable from the LAN transfer being broken, which is a worse
+failure than the layer simply not being there.
+
+`SATELLITE_TILES_PROVISIONED` and `LIDAR_TILES_PROVISIONED`
+([src/config.ts](../src/config.ts)) gate *offering* the layer. Flip one to
+`true` once the corresponding pipeline below actually publishes its
+`.mbtiles` to the served directory. A segment also appears whenever the file
+is already on the device regardless of the flag, so a sideloaded database is
+never hidden by a stale constant.
 
 **Satellite** (`tiles/satellite.mbtiles`) — plain `raster` tiles, no
 special encoding. Produce from aerial imagery (e.g. NAIP for California)

@@ -9,6 +9,11 @@ part broke, rather than leaving you to guess. Stop and record the failure
 rather than skipping ahead; a later step passing doesn't clear an earlier
 one that failed.
 
+> **Not in this pass:** the Satellite and LiDAR base layers. No pipeline
+> produces `satellite.mbtiles` or `lidar-hillshade.mbtiles` yet, so both
+> segments are hidden and the base-layer pill does not render at all. That
+> is deliberate (DATA.md §10) — do not report the missing pill as a fault.
+
 ## Before you start
 
 | Requirement | Check |
@@ -90,6 +95,19 @@ structures [tiles]: 38.9MB — 0ms parse
 A `0ms parse` on structures is the whole migration paying off: the ~102MB
 GeoJSON is never touched.
 
+## Step 3b — Map labels
+
+Tap **Download map labels** (a few hundred KB), then restart the app.
+
+Without this the map has **no road names and no place names at all** —
+MapLibre cannot draw text without an SDF glyph pack and has no system-font
+fallback. Do this before Step 4, or Step 4 has nothing to check.
+
+If the download succeeds but names still don't appear, suspect the space in
+the `file://` glyph path (`.../fonts/Noto Sans Regular/...`) — see
+[DATA.md](DATA.md) §3 "Known unknown" for the fix. Record which of the two
+you saw; they are different bugs.
+
 ## Step 4 — The map itself
 
 With `sonoma.mbtiles` installed, the app should reach the map directly
@@ -97,10 +115,20 @@ rather than the setup screen. Confirm the basemap is **Sonoma County, not
 a generic world map** — the latter means it fell back to the online demo
 style and the offline basemap isn't loading.
 
-Check all seven source layers actually render, since a tile set missing
-some of them still looks superficially fine: **roads, buildings, water,
-waterways, parks, landcover, county boundary.** Missing water and parks on
-an off-road navigation app is a functional gap, not a cosmetic one.
+Check the source layers actually render, since a tile set missing some of
+them still looks superficially fine: **roads, water, waterways, parks,
+landcover, county boundary.** Missing water and parks on an off-road
+navigation app is a functional gap, not a cosmetic one.
+
+**Do not check "buildings" against the basemap.** Its `building` layer is
+effectively empty — a decode of the real tiles found 23 buildings in
+downtown Santa Rosa at z14 and 5 in Petaluma. Building footprints come from
+the separate `structures.mbtiles` overlay (Step 3), and confirming those
+does not tell you anything about the basemap layer. Conflating the two is
+how a blank basemap layer passes.
+
+Also confirm **road and place names are drawn**, which is the whole point of
+Step 3b.
 
 ## Step 5 — Core features
 
@@ -112,6 +140,7 @@ None has run on real hardware.
 | GPS permission | Launch, accept the prompt | Blue dot appears at your real position |
 | Follow mode | Tap the follow control | Camera tracks you and rotates with heading |
 | Overlay toggles | Toggle structures / roads / parcels | Each appears and disappears; no "Sample data" badge once real data is installed |
+| Map data screen | Layers → **Map data**, then **Back to map** | The screen opens *after* tiles are installed — this is the only route to the downloads and the reset control once the first-run screen is gone |
 | Parcel tap | Tap a parcel | Info card shows APN, acreage, zoning — **this is the one at risk from the vector-tile migration**; it depends on press events surviving the source swap |
 | Search | Search a Sonoma place name | Result flies the camera there |
 | Routing | Long-press a destination | Route draws; elevation profile appears with gain/loss and max grade |
