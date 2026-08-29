@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 
 import { TILE_DOWNLOAD_URL } from '../config';
+import { deleteLidarTiles, deleteSatelliteTiles } from '../offline/baseLayerTiles';
 import {
   deleteOverlay,
   downloadOverlays,
@@ -163,6 +164,11 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback }: SetupScreenPr
       OVERLAY_TILE_IDS.forEach(deleteOverlayTiles);
       OVERLAY_IDS.forEach(deleteOverlay);
       deleteTiles();
+      // Satellite and LiDAR hillshade are downloaded from MapScreen, so they
+      // have to be cleared here too — otherwise "reset" leaves exactly the
+      // stuck state this control exists to escape, just on a different layer.
+      deleteSatelliteTiles();
+      deleteLidarTiles();
       setOverlayResult(null);
       setTileResult(null);
       setError(null);
