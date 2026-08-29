@@ -7,6 +7,7 @@ import {
 
 import type { OverlaySource } from '../overlays/overlaySource';
 import type { StructureFeatureCollection } from '../overlays/types';
+import { GLYPH_FONTSTACK } from '../config';
 
 interface StructuresOverlayProps {
   source: OverlaySource<StructureFeatureCollection>;
@@ -15,7 +16,12 @@ interface StructuresOverlayProps {
 }
 
 const SOURCE_ID = 'structures-source';
-const FONT_REGULAR = ['Noto Sans Regular'];
+// Derived from GLYPH_FONTSTACK rather than repeated as a literal: it is
+// also the directory name in both the download URL and the on-device
+// path (glyphs.ts), so a rename that touched only one of the two would
+// leave MapLibre requesting a fontstack no pack was installed under —
+// silently reproducing the missing-labels defect this all exists to fix.
+const FONT_REGULAR = [GLYPH_FONTSTACK];
 
 const DOCUMENTED_FILTER: FilterSpecification = ['==', ['get', 'documented'], true];
 const UNDOCUMENTED_FILTER: FilterSpecification = ['==', ['get', 'documented'], false];

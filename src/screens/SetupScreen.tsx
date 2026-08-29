@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -231,8 +232,16 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback, onClose }: Setu
     }
   };
 
+  // Every guard below reads this rather than re-listing the flags. The reset
+  // guard already drifted once: it enumerated four of the five busy states and
+  // omitted glyphsBusy, so resetting mid-glyph-download deleted tiles/fonts
+  // while the loop was still writing into it — the loop recreated the
+  // directory, and reset reported "All downloaded data removed" over a
+  // partial pack that could never report ready.
+  const busy = downloading || overlayBusy || tilesBusy || glyphsBusy || resetBusy;
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>FreeRoam+</Text>
       <Text style={styles.subtitle}>
         {onClose ? 'Map data' : 'Offline map data not installed'}
@@ -335,7 +344,7 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback, onClose }: Setu
       <Pressable
         style={styles.secondaryButton}
         onPress={handleResetDownloads}
-        disabled={resetBusy || downloading || overlayBusy || tilesBusy}
+        disabled={busy}
       >
         <Text style={styles.secondaryButtonText}>
           {resetBusy ? 'Removing…' : 'Reset all downloaded data'}
@@ -345,8 +354,17 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback, onClose }: Setu
       {resetResult && <Text style={styles.body}>{resetResult}</Text>}
 
       {onClose ? (
-        <Pressable style={styles.primaryButton} onPress={onClose}>
-          <Text style={styles.primaryButtonText}>Back to map</Text>
+        // Leaving mid-transfer strands the writer: the busy flags are
+        // per-mount, so re-entering would offer an idle download button and an
+        // enabled reset over a download that is still running.
+        <Pressable
+          style={[styles.primaryButton, busy && styles.buttonDisabled]}
+          onPress={onClose}
+          disabled={busy}
+        >
+          <Text style={styles.primaryButtonText}>
+            {busy ? 'Downloading…' : 'Back to map'}
+          </Text>
         </Pressable>
       ) : (
         <Pressable style={styles.secondaryButton} onPress={onUseOnlineFallback}>
@@ -355,17 +373,29 @@ export function SetupScreen({ onTilesReady, onUseOnlineFallback, onClose }: Setu
           </Text>
         </Pressable>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
+    backgroundColor: '#f4f1ea',
+  },
+  // flexGrow rather than flex so the content still centres when it fits, but
+  // scrolls instead of overflowing when it does not. This screen gained three
+  // controls and had no scroll view at all — on a short device the lower
+  // ones, including the reset, were simply unreachable.
+  container: {
+    flexGrow: 1,
     backgroundColor: '#f4f1ea',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
+    paddingBottom: 48,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
   title: {
     fontSize: 28,

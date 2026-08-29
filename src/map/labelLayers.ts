@@ -14,10 +14,17 @@
  * are consistent with each other.
  */
 
+import { GLYPH_FONTSTACK } from '../config';
+
 /** Source id these layers expect: the OpenMapTiles vector source, wherever it's declared in the containing style. */
 export const STREET_LABELS_SOURCE_ID = 'openmaptiles';
 
-const FONT_REGULAR = ['Noto Sans Regular'];
+// Derived from GLYPH_FONTSTACK rather than repeated as a literal: it is
+// also the directory name in both the download URL and the on-device
+// path (glyphs.ts), so a rename that touched only one of the two would
+// leave MapLibre requesting a fontstack no pack was installed under —
+// silently reproducing the missing-labels defect this all exists to fix.
+const FONT_REGULAR = [GLYPH_FONTSTACK];
 
 /**
  * Returns the label layers, or an empty array when no glyph pack is

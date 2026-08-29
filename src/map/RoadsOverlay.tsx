@@ -6,6 +6,7 @@ import {
 import type { ExpressionSpecification } from '@maplibre/maplibre-gl-style-spec';
 
 import type { ClassifiedRoadFeatureCollection } from '../overlays/roadTypes';
+import { GLYPH_FONTSTACK } from '../config';
 
 interface RoadsOverlayProps {
   data: ClassifiedRoadFeatureCollection;
@@ -14,7 +15,12 @@ interface RoadsOverlayProps {
 }
 
 const SOURCE_ID = 'roads-source';
-const FONT_REGULAR = ['Noto Sans Regular'];
+// Derived from GLYPH_FONTSTACK rather than repeated as a literal: it is
+// also the directory name in both the download URL and the on-device
+// path (glyphs.ts), so a rename that touched only one of the two would
+// leave MapLibre requesting a fontstack no pack was installed under —
+// silently reproducing the missing-labels defect this all exists to fix.
+const FONT_REGULAR = [GLYPH_FONTSTACK];
 
 const DRIVABLE_FILTER: FilterSpecification = [
   'in',

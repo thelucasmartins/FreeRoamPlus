@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
+import { Modal } from 'react-native';
 
 import { DEV_FALLBACK_STYLE_URL } from './src/config';
 import { buildOfflineStyle } from './src/map/style';
@@ -49,15 +50,7 @@ export default function App() {
   );
 
   let content;
-  if (setupOpen) {
-    content = (
-      <SetupScreen
-        onTilesReady={setTileStatus}
-        onUseOnlineFallback={() => setUseOnlineFallback(true)}
-        onClose={closeSetup}
-      />
-    );
-  } else if (offlineStyle) {
+  if (offlineStyle) {
     content = (
       <MapScreen
         streetMapStyle={offlineStyle}
@@ -89,6 +82,36 @@ export default function App() {
   return (
     <>
       <ErrorBoundary>{content}</ErrorBoundary>
+
+      {/*
+        Layered OVER the map rather than swapped for it.
+        Rendering SetupScreen in `content` put a different component type in
+        the same slot, so React unmounted MapScreen on every visit — and
+        MapScreen holds the breadcrumb trail in useState, deliberately
+        unpersisted because it is a live "path so far" rather than a saved
+        track. One tap on a row sitting directly below Parcels would have
+        silently discarded a trail recorded hours into the backcountry, on an
+        app whose breadcrumb is the way back. It also reset the camera, the
+        active route and the layer toggles, and re-parsed the 49MB roads
+        overlay and 12MB search index on every return.
+
+        A Modal keeps MapScreen mounted underneath. onRequestClose also gives
+        the Android hardware back button the right behaviour here, which
+        nothing else in this app currently handles.
+      */}
+      <Modal
+        visible={setupOpen}
+        animationType="slide"
+        onRequestClose={closeSetup}
+        presentationStyle="fullScreen"
+      >
+        <SetupScreen
+          onTilesReady={setTileStatus}
+          onUseOnlineFallback={() => setUseOnlineFallback(true)}
+          onClose={closeSetup}
+        />
+      </Modal>
+
       <StatusBar style="dark" />
     </>
   );
